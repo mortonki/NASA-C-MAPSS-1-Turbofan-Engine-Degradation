@@ -1,0 +1,46 @@
+# Python Environment Rules
+
+This project uses uv-managed virtual environments.
+
+Always use the local virtual environment interpreter located at:
+
+.venv/bin/python
+
+Do not use:
+- system Python
+- pyenv Python
+- global pip
+- poetry environments
+- conda environments
+
+When running Python commands:
+- use `.venv/bin/python`
+- use `.venv/bin/pip`
+- prefer `uv run` where appropriate
+
+Examples:
+- `.venv/bin/python script.py`
+- `.venv/bin/python -m pytest`
+- `.venv/bin/pip install package`
+- `uv run python script.py`
+
+Assume dependencies are installed into the local `.venv`.
+
+If the environment does not exist, create it with:
+
+```bash
+uv venv
+
+# Other rules
+
+Do not read anything in the directory `archive`.
+
+Check the number of lines before reading tabular data files (e.g. *.csv). Read only the first 5 lines of data. 
+
+Do not attempt to use replace_in_file in PLAN MODE. Ask to switch to ACT MODE if use of the tool is necessary.
+
+If replace_in_file tool fails, ensure you use correct indentation and avoid long edits, try to do edits in multiple steps. 
+
+If search and replace does not work after 2 attempts, fall back to write_to_file or ask the user for help.
+
+Do not complete tasks until you have verified that the edited code does not produce errors.
