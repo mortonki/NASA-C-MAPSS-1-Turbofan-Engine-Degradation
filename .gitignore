@@ -14,3 +14,9 @@ wheels/
 
 # JSON files
 *.json
+
+# PDF files
+*.pdf
+
+# Text files
+*.txt

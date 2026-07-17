@@ -35,12 +35,16 @@ uv venv
 
 Do not read anything in the directory `archive`.
 
-Check the number of lines before reading tabular data files (e.g. *.csv). Read only the first 5 lines of data. 
+This is a research project. Plan and act accordinly.
 
-Do not attempt to use replace_in_file in PLAN MODE. Ask to switch to ACT MODE if use of the tool is necessary.
+Check the number of lines before reading tabular data files (e.g. *.csv). If the file has more than 50 lines, ask permission to read it. 
 
-If replace_in_file tool fails, ensure you use correct indentation and avoid long edits, try to do edits in multiple steps. 
+Do not attempt to use replace_in_file in PLAN MODE. Ask to switch to ACT MODE.
 
-If search and replace does not work after 2 attempts, fall back to write_to_file or ask the user for help.
+If replace_in_file tool fails, 
+    try to do edits in multiple steps, avoiding long edits 
+    ensure that you have used indentation as in the original
+    check white spaces in the original before attempting to edit. 
+If replace_in_file still fails, show the user the search pattern that did not match anything in the file before using write_to_file.
 
-Do not complete tasks until you have verified that the edited code does not produce errors.
+Think decisively and make sure you do not get stuck in thought loops.
