@@ -20,3 +20,6 @@ wheels/
 
 # Text files
 *.txt
+
+# Model files
+*.pth
