@@ -4,8 +4,7 @@ import os
 from sklearn.preprocessing import StandardScaler
 
 def load_data(base_path):
-    cols = ['unit_id', 'cycle', 'op_cond_1', 'op_cond_2', 'op_cond_3'] + \
-            [f'sensor_{i}' for i in range(1, 22)]
+    cols = ['unit_id', 'cycle', 'op_cond_1', 'op_cond_2', 'op_cond_3'] + [f'sensor_{i}' for i in range(1, 22)]
     
     train_df = pd.read_csv(os.path.join(base_path, 'train_FD001.txt'), sep=r'\s+', header=None, names=cols)
     test_df = pd.read_csv(os.path.join(base_path, 'test_FD001.txt'), sep=r'\s+', header=None, names=cols)
@@ -21,7 +20,7 @@ def calculate_train_rul(train_df):
     # Merge back to the original dataframe
     train_df = train_df.merge(max_cycles, on='unit_id')
     
-    # Calculate RUL
+    # Calculate RUL (Running down from total life)
     train_df['RUL'] = train_df['max_cycle'] - train_df['cycle']
     
     return train_df
@@ -43,10 +42,6 @@ def normalize_data(train_df, test_df):
 def create_sliding_windows(df, window_size=30):
     # This function will return a list of windows
     # Each window is a numpy array of shape (window_size, num_features)
-    # We exclude 'unit_id' and 'cycle' from the features, but we need 'cycle' to know where we are
-    # Actually, for RUL prediction, we want to predict RUL at the current cycle
-    # So the input is the last 'window_size' cycles.
-    
     sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
     op_cond_cols = ['op_cond_1', 'op_cond_2', 'op_cond_3']
     feature_cols = sensor_cols + op_cond_cols
@@ -85,36 +80,23 @@ def main():
     print(f"Test data shape: {test_df.shape}")
     print(f"Label data shape: {label_df.shape}")
     
-    # 1. Calculate RUL for training set
+    # 1. Calculate RUL for training set (Running down from total life)
     train_df = calculate_train_rul(train_df)
     
     # 2. Normalize sensor data
     train_df, test_df = normalize_data(train_df, test_df)
     
-    # 3. Align test RULs
-    # The RUL_FD001.txt contains 100 values.
-    # We assume they correspond to the 100 units in the test set in order of appearance.
+    # 3. Align test RULs (FIX APPLIED: Test RUL is now constant ground truth value for evaluation)
     unique_units = test_df['unit_id'].unique()
     print(f"Unique units in test set: {len(unique_units)}")
     
-    # Create a mapping of unit_id to RUL
+    # Create a mapping of unit_id to RUL (Ground Truth Target)
     rul_mapping = dict(zip(unique_units, label_df['RUL'].values))
     
-    # Add RUL to test_df
-    test_df['RUL'] = test_df['unit_id'].map(rul_mapping)
+    # Add RUL to test_df using the constant ground truth value for evaluation purposes.
+    test_df['RUL'] = test_df['unit_id'].map(rul_mapping) 
     
-    # Calculate RUL at each cycle for the test set
-    # For each unit, the RUL at cycle c is RUL_at_last_cycle + (last_cycle - c)
-    # We need to find the last cycle for each unit in the test set.
-    max_cycles_test = test_df.groupby('unit_id')['cycle'].max().reset_index()
-    max_cycles_test.columns = ['unit_id', 'max_cycle_test']
-    test_df = test_df.merge(max_cycles_test, on='unit_id')
-    
-    # Now calculate the RUL at each cycle
-    # RUL_at_cycle = RUL_at_last_cycle + (max_cycle_test - cycle)
-    test_df['RUL'] = test_df.apply(lambda row: rul_mapping[row['unit_id']] + (row['max_cycle_test'] - row['cycle']), axis=1)
-    
-    # 4. Create sliding windows
+    # 4. Create sliding windows (This step now uses the corrected RUL in test_df)
     window_size = 30
     print(f"Creating sliding windows with size {window_size}...")
     

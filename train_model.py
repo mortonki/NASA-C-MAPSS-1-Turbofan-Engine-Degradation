@@ -8,13 +8,13 @@ from data_prep import load_data, calculate_train_rul, normalize_data, create_sli
 import time
 
 # Hyperparameters
-WINDOW_SIZE = 30
+WINDOW_SIZE = 100
 NUM_FEATURES = 24
-HIDDEN_SIZE = 64
+HIDDEN_SIZE = 128
 NUM_LAYERS = 2
-BATCH_SIZE = 64
+BATCH_SIZE = 256
 LEARNING_RATE = 0.001
-EPOCHS = 50
+EPOCHS = 100
 DEVICE = torch.device("cpu")
 
 class LSTMModel(nn.Module):
