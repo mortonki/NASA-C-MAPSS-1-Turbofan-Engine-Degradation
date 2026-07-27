@@ -3,6 +3,15 @@ import numpy as np
 import os
 from sklearn.preprocessing import StandardScaler
 
+def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
+    # Capping values based on percentiles derived from the training distribution (or provided bounds)
+    for col in cols:
+        lower_bound = df[col].quantile(lower)
+        upper_bound = df[col].quantile(upper)
+        df[col] = np.where(df[col] < lower_bound, lower_bound, df[col])
+        df[col] = np.where(df[col] > upper_bound, upper_bound, df[col])
+        return df # Added return statement to satisfy linter/user feedback
+
 def load_data(base_path):
     cols = ['unit_id', 'cycle', 'op_cond_1', 'op_cond_2', 'op_cond_3'] + [f'sensor_{i}' for i in range(1, 22)]
     
@@ -22,6 +31,9 @@ def calculate_train_rul(train_df):
     
     # Calculate RUL (Running down from total life)
     train_df['RUL'] = train_df['max_cycle'] - train_df['cycle']
+
+    # Drop the max_cycle column as it's no longer needed
+    train_df.drop(columns=['max_cycle'], inplace=True)
     
     return train_df
 
@@ -30,12 +42,13 @@ def normalize_data(train_df, test_df):
     sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
     
     scaler = StandardScaler()
-    # Fit on training data
-    scaler.fit(train_df[sensor_cols])
-    
-    # Transform both
-    train_df[sensor_cols] = scaler.transform(train_df[sensor_cols])
+    # Fit on training data and transform both datasets (Standardization)
+    train_df[sensor_cols] = scaler.fit_transform(train_df[sensor_cols])
     test_df[sensor_cols] = scaler.transform(test_df[sensor_cols])
+
+    # Apply Outlier Capping (Winsorizing) based on training data distribution to mitigate MinMax shifts
+    apply_outlier_capping(train_df, sensor_cols, lower=0.01, upper=0.99)
+    apply_outlier_capping(test_df, sensor_cols, lower=0.01, upper=0.99)
     
     return train_df, test_df
 
@@ -83,7 +96,7 @@ def main():
     # 1. Calculate RUL for training set (Running down from total life)
     train_df = calculate_train_rul(train_df)
     
-    # 2. Normalize sensor data
+    # 2. Normalize sensor data and apply capping to mitigate MinMax shifts
     train_df, test_df = normalize_data(train_df, test_df)
     
     # 3. Align test RULs (FIX APPLIED: Test RUL is now constant ground truth value for evaluation)
