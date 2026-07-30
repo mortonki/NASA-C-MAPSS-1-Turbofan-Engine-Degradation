@@ -34,17 +34,13 @@ uv venv
 # Other rules
 
 Do not read anything in the directory `archive`.
-
-This is a research project. Do not create plans for the whole project at once. Write easy to understand code. The user is learning.
+gemma4-it-e4b-FLM
+This is a research project. The user is learning. Do not create plans for the whole project at once. Write easy to understand code. 
 
 Check the number of lines before reading tabular data files (e.g. *.csv). If the file has more than 50 lines, ask permission to read it. 
 
 Do not attempt to use replace_in_file in PLAN MODE. Ask to switch to ACT MODE.
 
-If replace_in_file tool fails, 
-    try to do edits one small step at time, avoiding long edits 
-    ensure that you have used indentation as in the original
-    check white spaces in the original before attempting to edit. 
-If replace_in_file still fails, show the user the search pattern that did not match anything in the file before using write_to_file.
+When replace_in_file tool fails in a .ipynb file, and then you are given a file_content block, try using replace_in_file tool again against that content, instead of content returned in replace_in_file.
 
-Think decisively and make sure you do not get stuck in thought loops.
+When working with Jupyter notebook file, do not try to write the complete file content on failure. Instead, when given a file_content block, try using replace_in_file tool again with that content in mind.
