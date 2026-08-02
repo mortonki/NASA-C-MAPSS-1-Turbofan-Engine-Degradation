@@ -123,35 +123,21 @@ def _(train_df):
 @app.cell
 def _(calculate_train_rul, train_df):
     # Calculate RUL for training set as per original notebook intent before EDA checks
-    train_df_1 = calculate_train_rul(train_df)
-    return (train_df_1,)
+    train_df_rul = calculate_train_rul(train_df=train_df.copy())
+    return (train_df_rul,)
 
 
 @app.cell
-def _(train_df): # Changed input to train_df as this cell modifies both train and test dataframes in the original flow context, but we only have access to train_df here based on previous cells. We must assume test_df is available or pass it if possible. Given the error context, I will modify this cell to use a dynamic drop list derived from correlation analysis results (which are printed earlier) and apply it safely.
-    # Dynamically determine features to drop based on low correlation with RUL (mimicking previous logic but making it robust)
-    correlations = train_df.drop(['cycle', 'unit_id'], axis=1).corr()['RUL'].abs().sort_values(ascending=False)
-    least_informative = correlations.tail(10).index.tolist() # Get the names of the 10 least informative features
-    print(f"Dropping least informative features: {least_informative}")
-
-    # Apply dropping only if columns exist in train_df (and assuming test_df is available/passed correctly in execution flow)
-    cols_to_drop = [col for col in least_informative if col in train_df.columns]
-    train_df.drop(columns=cols_to_drop, inplace=True)
-    # NOTE: In a real Marimo environment, we would need to pass test_df here too. For this fix, I focus on making the logic robust for train_df based on available context.
-    return train_df
-
-
-@app.cell
-def _(train_df_1):
+def _(train_df_rul):
     # Select only feature columns (excluding 'RUL') from the processed train_df.
-    feature_cols = [col for col in train_df_1.columns if col not in ['RUL', 'unit_id', 'cycle']]
+    feature_cols = [col for col in train_df_rul.columns if col not in ['RUL', 'unit_id', 'cycle']]
     return (feature_cols,)
 
 
 @app.cell
-def _(feature_cols, plt, sns, train_df_1):
+def _(feature_cols, plt, sns, train_df_rul):
     # Generate a heatmap to visualize pairwise correlations among all features for multicollinearity insight.
-    features_df = train_df_1[feature_cols]  # Exclude 'RUL' and 'unit_id' from features
+    features_df = train_df_rul[feature_cols]  # Exclude 'RUL' and 'unit_id' from features
     correlation_matrix = features_df.corr()
     plt.figure(figsize=(18, 16))
     # Calculate and plot the correlation matrix.
@@ -162,7 +148,7 @@ def _(feature_cols, plt, sns, train_df_1):
 
 
 @app.cell
-def _(feature_cols, pd, sm, train_df_1):
+def _(feature_cols, pd, sm, train_df_rul):
     # Calculate Variance Inflation Factor (VIF) for each feature to assess multicollinearity.
     def calculate_vif(df):
         vif_dict = {}
@@ -174,7 +160,7 @@ def _(feature_cols, pd, sm, train_df_1):
             vif = 1 / (1 - r_sq) if 1 - r_sq != 0 else float('inf')
             vif_dict[col] = round(vif, 2)
         return vif_dict
-    vif_results = calculate_vif(train_df_1[feature_cols])
+    vif_results = calculate_vif(train_df_rul[feature_cols])
     vif_df = pd.DataFrame.from_dict(vif_results, orient='index', columns=['VIF'])
     print('\nVIF DataFrame:')
     vif_df.T
@@ -190,24 +176,15 @@ def _(mo):
 
 
 @app.cell
-def _(test_df, train_df_1):
-    # Drop least informative features based on correlation analysis
-    sensors_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
-    train_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
-    test_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
-    return
-
-
-@app.cell
-def _(feature_cols, plt, sns, train_df_1):
+def _(feature_cols, plt, sns, train_df_rul):
     # Key Feature Distribution Analysis: Plot histograms and KDEs for all representative features to examine their individual distributions (skewness, modality).
     print("Generating feature distribution plots...")
 
     for column in feature_cols:
-        if column in train_df_1.columns: # Explicit check for safety within the cell context
+        if column in train_df_rul.columns: # Explicit check for safety within the cell context
             plt.figure(figsize=(12, 6))
             # Use dropna() for robustness if any values are NaN after preprocessing steps not shown here
-            sns.histplot(train_df_1[column].dropna(), bins=30, kde=True) 
+            sns.histplot(train_df_rul[column].dropna(), bins=30, kde=True) 
             plt.title(f'Distribution of Feature: {column}')
             plt.xlabel(column)
             plt.ylabel('Frequency')
@@ -216,15 +193,33 @@ def _(feature_cols, plt, sns, train_df_1):
 
 
 @app.cell
-def _():
+def _(test_df, train_df_rul):
+    # Drop least informative features based on correlation analysis
+    sensors_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    train_df_rul.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
+    test_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
     return
 
 
 @app.cell
-def _(plt, sns, train_df_1):
+def _():
+    # Dynamically determine features to drop based on low correlation with RUL (mimicking previous logic but making it robust)
+    #correlations = train_df_1.drop(['cycle', 'unit_id'], axis=1).corr()['RUL'].abs().sort_values(ascending=False)
+    #least_informative = correlations.tail(10).index.tolist() # Get the names of the 10 least informative features
+    #print(f"Dropping least informative features: {least_informative}")
+
+    # Apply dropping only if columns exist in train_df_1 (and assuming test_df_1 is available/passed correctly in execution flow)
+    #cols_to_drop = [col for col in least_informative if col in train_df_1.columns]
+    #train_df_1.drop(columns=cols_to_drop, inplace=True)
+    # NOTE: In a real Marimo environment, we would need to pass test_df_1 here too. For this fix, I focus on making the logic robust for train_df_1 based on available context.
+    return
+
+
+@app.cell
+def _(plt, sns, train_df_rul):
     # Visualize the frequency distribution of Remaining Useful Life (RUL).
     plt.figure(figsize=(10, 6))
-    sns.histplot(train_df_1['RUL'], bins=30, kde=True)  # Assuming train_df is available and contains 'RUL' column 
+    sns.histplot(train_df_rul['RUL'], bins=30, kde=True)  # Assuming train_df is available and contains 'RUL' column 
     plt.title('Frequency Distribution of Remaining Useful Life (RUL)')
     plt.xlabel('Remaining Useful Life (RUL)')
     plt.ylabel('Frequency')
@@ -241,11 +236,11 @@ def _(mo):
 
 
 @app.cell
-def _(pd, test_df, train_df_1):
+def _(pd, test_df, train_df_rul):
     # Test for covariate shift between training and test datasets
     report = {}
-    for col in train_df_1.drop(columns=['RUL']).columns:
-        train_col = train_df_1[col]
+    for col in train_df_rul.drop(columns=['RUL']).columns:
+        train_col = train_df_rul[col]
         test_col = test_df[col]
         report[col] = {'Train Mean': train_col.mean(), 'Test Mean': test_col.mean(), 'Mean Difference': abs(train_col.mean() - test_col.mean()), 'Train Std': train_col.std(), 'Test Std': test_col.std(), 'Std Difference': abs(train_col.std() - test_col.std()), 'Train Min': train_col.min(), 'Test Min': test_col.min(), 'Train Max': train_col.max(), 'Test Max': test_col.max(), 'Test Out of Train Range': test_col.min() < train_col.min() or test_col.max() > train_col.max()}
     simple_report_df = pd.DataFrame(report).T
