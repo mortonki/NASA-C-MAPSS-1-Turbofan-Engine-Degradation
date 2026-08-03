@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.14"
+__generated_with = "0.23.15"
 app = marimo.App()
 
 
@@ -98,13 +98,30 @@ def _(base_path, load_data):
     print(f"Training data shape: {train_df.shape}")
     print(f"Label data shape: {label_df.shape}")
     print(f"Test data shape: {test_df.shape}")
+    return label_df, test_df, train_df
+
+
+@app.cell
+def _(train_df):
     print("\nTraining data head:")
-    print(train_df.head(1))
+    train_df.head(1)
+
+    return
+
+
+@app.cell
+def _(label_df):
     print("\nLabel data head:")
-    print(label_df.head(1))
+    label_df.head(1)
+
+    return
+
+
+@app.cell
+def _(test_df):
     print("\nTest data head:")
-    print(test_df.head(1))
-    return test_df, train_df
+    test_df.head(1)
+    return
 
 
 @app.cell
@@ -255,6 +272,47 @@ def _():
     #cols_to_drop = [col for col in least_informative if col in train_df_1.columns]
     #train_df_1.drop(columns=cols_to_drop, inplace=True)
     # NOTE: In a real Marimo environment, we would need to pass test_df_1 here too. For this fix, I focus on making the logic robust for train_df_1 based on available context.
+    return
+
+
+@app.cell
+def _(plt, sns, train_df_rul):
+    # Sequence sanity check: how many cycles per engine?
+    unit_lengths = train_df_rul.groupby("unit_id").size()
+
+    print(unit_lengths.describe())
+    print(f"Engines with at least 30 cycles: {(unit_lengths >= 30).sum()} / {len(unit_lengths)}")
+
+    plt.figure(figsize=(8, 4))
+    sns.histplot(unit_lengths, bins=30, kde=False)
+    plt.title("Distribution of sequence lengths per engine")
+    plt.xlabel("Number of cycles")
+    plt.ylabel("Count")
+    plt.show()
+    return
+
+
+@app.cell
+def _(plt, train_df_rul):
+    # Sequence trajectory check: inspect how selected sensors evolve over time for a few units
+
+    sample_units = train_df_rul["unit_id"].drop_duplicates().sample(6, random_state=42).tolist()
+    sensor_cols = ["sensor_2", "sensor_4", "sensor_11", "sensor_14"]
+
+    fig_trajectory, axes = plt.subplots(2, 3, figsize=(16, 8), sharey=True)
+
+    for ax_trajetory, unit in zip(axes.flatten(), sample_units):
+        unit_df = train_df_rul[train_df_rul["unit_id"] == unit].sort_values("cycle")
+        for col_trajectory in sensor_cols:
+            ax_trajetory.plot(unit_df["cycle"], unit_df[col_trajectory], label=col_trajectory, alpha=0.8)
+        ax_trajetory.set_title(f"Unit {unit}")
+        ax_trajetory.set_xlabel("Cycle")
+        ax_trajetory.set_ylabel("Value")
+        ax_trajetory.grid(alpha=0.3)
+
+    axes.flatten()[-1].legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=8)
+    plt.tight_layout()
+    plt.show()
     return
 
 
