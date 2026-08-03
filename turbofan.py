@@ -9,11 +9,12 @@ def _():
     import kagglehub
     from pathlib import Path
     import pandas as pd
+    import matplotlib
+    matplotlib.use("module://marimo._output.mpl")
     import matplotlib.pyplot as plt
     import seaborn as sns
     import statsmodels.api as sm
     import marimo as mo
-
     from data_prep import load_data, calculate_train_rul, normalize_data, apply_outlier_capping, create_sliding_windows
 
     return (
@@ -21,12 +22,23 @@ def _():
         calculate_train_rul,
         kagglehub,
         load_data,
+        matplotlib,
         mo,
         pd,
         plt,
         sm,
         sns,
     )
+
+
+@app.cell
+def _(matplotlib, mo):
+    # Check the current matplotlib backend
+    print(matplotlib.get_backend())
+
+    # Check the version of marimo
+    print(mo.__version__)
+    return
 
 
 @app.cell
@@ -135,6 +147,34 @@ def _(train_df_rul):
 
 
 @app.cell
+def _(feature_cols, mo, plt, sns, train_df_rul):
+    # Key Feature Distribution Analysis: Plot histograms and KDEs for all representative features to examine their individual distributions (skewness, modality).
+    print("Generating feature distribution plots...")
+
+    plots = []
+
+    for column in feature_cols:
+        if column in train_df_rul.columns:
+            fig, ax = plt.subplots(figsize=(12, 6))
+
+            sns.histplot(
+                train_df_rul[column].dropna(),
+                bins=30,
+                kde=True,
+                ax=ax,
+            )
+
+            ax.set_title(f"Distribution of Feature: {column}")
+            ax.set_xlabel(column)
+            ax.set_ylabel("Frequency")
+
+            plots.append(mo.mpl.interactive(fig))
+
+    plots
+    return
+
+
+@app.cell
 def _(feature_cols, plt, sns, train_df_rul):
     # Generate a heatmap to visualize pairwise correlations among all features for multicollinearity insight.
     features_df = train_df_rul[feature_cols]  # Exclude 'RUL' and 'unit_id' from features
@@ -170,25 +210,8 @@ def _(feature_cols, pd, sm, train_df_rul):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The VIF analysis shows that sensor_9 is multicollinear with other sensors, meaning that it can be explained in terms of others. Given the point is
+    The VIF analysis shows that sensor_9 and sensor_14 are multicollinear with other sensors, meaning that they can be explained in terms of others.
     """)
-    return
-
-
-@app.cell
-def _(feature_cols, plt, sns, train_df_rul):
-    # Key Feature Distribution Analysis: Plot histograms and KDEs for all representative features to examine their individual distributions (skewness, modality).
-    print("Generating feature distribution plots...")
-
-    for column in feature_cols:
-        if column in train_df_rul.columns: # Explicit check for safety within the cell context
-            plt.figure(figsize=(12, 6))
-            # Use dropna() for robustness if any values are NaN after preprocessing steps not shown here
-            sns.histplot(train_df_rul[column].dropna(), bins=30, kde=True) 
-            plt.title(f'Distribution of Feature: {column}')
-            plt.xlabel(column)
-            plt.ylabel('Frequency')
-            plt.show()
     return
 
 
@@ -198,20 +221,6 @@ def _(test_df, train_df_rul):
     sensors_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
     train_df_rul.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
     test_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
-    return
-
-
-@app.cell
-def _():
-    # Dynamically determine features to drop based on low correlation with RUL (mimicking previous logic but making it robust)
-    #correlations = train_df_1.drop(['cycle', 'unit_id'], axis=1).corr()['RUL'].abs().sort_values(ascending=False)
-    #least_informative = correlations.tail(10).index.tolist() # Get the names of the 10 least informative features
-    #print(f"Dropping least informative features: {least_informative}")
-
-    # Apply dropping only if columns exist in train_df_1 (and assuming test_df_1 is available/passed correctly in execution flow)
-    #cols_to_drop = [col for col in least_informative if col in train_df_1.columns]
-    #train_df_1.drop(columns=cols_to_drop, inplace=True)
-    # NOTE: In a real Marimo environment, we would need to pass test_df_1 here too. For this fix, I focus on making the logic robust for train_df_1 based on available context.
     return
 
 
@@ -232,6 +241,20 @@ def _(mo):
     mo.md(r"""
     The RUL distribution shows that the majority of engines have RUL of about 150 cycles or less with fewer extending towards 350 cycles. The spike at 0 cycles is because some sequences are shorter than the time window.
     """)
+    return
+
+
+@app.cell
+def _():
+    # Dynamically determine features to drop based on low correlation with RUL (mimicking previous logic but making it robust)
+    #correlations = train_df_1.drop(['cycle', 'unit_id'], axis=1).corr()['RUL'].abs().sort_values(ascending=False)
+    #least_informative = correlations.tail(10).index.tolist() # Get the names of the 10 least informative features
+    #print(f"Dropping least informative features: {least_informative}")
+
+    # Apply dropping only if columns exist in train_df_1 (and assuming test_df_1 is available/passed correctly in execution flow)
+    #cols_to_drop = [col for col in least_informative if col in train_df_1.columns]
+    #train_df_1.drop(columns=cols_to_drop, inplace=True)
+    # NOTE: In a real Marimo environment, we would need to pass test_df_1 here too. For this fix, I focus on making the logic robust for train_df_1 based on available context.
     return
 
 
