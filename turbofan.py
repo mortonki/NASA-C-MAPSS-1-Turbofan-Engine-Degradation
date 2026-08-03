@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.15"
+__generated_with = "0.23.16"
 app = marimo.App()
 
 
@@ -105,7 +105,6 @@ def _(base_path, load_data):
 def _(train_df):
     print("\nTraining data head:")
     train_df.head(1)
-
     return
 
 
@@ -113,7 +112,6 @@ def _(train_df):
 def _(label_df):
     print("\nLabel data head:")
     label_df.head(1)
-
     return
 
 
@@ -293,17 +291,33 @@ def _(plt, sns, train_df_rul):
 
 
 @app.cell
-def _(plt, train_df_rul):
+def _(feature_cols, plt, train_df_rul):
     # Sequence trajectory check: inspect how selected sensors evolve over time for a few units
 
-    sample_units = train_df_rul["unit_id"].drop_duplicates().sample(6, random_state=42).tolist()
-    sensor_cols = ["sensor_2", "sensor_4", "sensor_11", "sensor_14"]
+    # Use a deterministic set of units instead of a random sample.
+    _unit_lengths = train_df_rul.groupby("unit_id").size().sort_values(ascending=False)
+    sample_units = _unit_lengths.head(6).index.tolist()
+
+    # Build average trajectories across units, with variability estimates.
+    trajectory_mean = (
+        train_df_rul.groupby(["unit_id", "cycle"])[feature_cols]
+        .mean()
+        .groupby("cycle")
+        .mean()
+    )
+
+    trajectory_std = (
+        train_df_rul.groupby(["unit_id", "cycle"])[feature_cols]
+        .mean()
+        .groupby("cycle")
+        .std()
+    )
 
     fig_trajectory, axes = plt.subplots(2, 3, figsize=(16, 8), sharey=True)
 
     for ax_trajetory, unit in zip(axes.flatten(), sample_units):
         unit_df = train_df_rul[train_df_rul["unit_id"] == unit].sort_values("cycle")
-        for col_trajectory in sensor_cols:
+        for col_trajectory in feature_cols:
             ax_trajetory.plot(unit_df["cycle"], unit_df[col_trajectory], label=col_trajectory, alpha=0.8)
         ax_trajetory.set_title(f"Unit {unit}")
         ax_trajetory.set_xlabel("Cycle")
@@ -313,6 +327,35 @@ def _(plt, train_df_rul):
     axes.flatten()[-1].legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=8)
     plt.tight_layout()
     plt.show()
+    return (sample_units,)
+
+
+@app.cell
+def _(feature_cols, pd, sample_units, train_df_rul):
+    # Quantitative sequence trajectory check: summarize how selected sensors change over the life of a few units
+
+    trajectory_summary = []
+    for sample_unit in sample_units:
+        _unit_df = train_df_rul[train_df_rul["unit_id"] == sample_unit].sort_values("cycle")
+        for sensor in feature_cols:
+            start_val = _unit_df[sensor].iloc[0]
+            end_val = _unit_df[sensor].iloc[-1]
+            delta_val = end_val - start_val
+            mean_step = _unit_df[sensor].diff().dropna().mean() if len(_unit_df) > 1 else 0.0
+            corr = _unit_df[sensor].corr(_unit_df["cycle"])
+            trajectory_summary.append({
+                "unit_id": sample_unit,
+                "sensor": sensor,
+                "start": start_val,
+                "end": end_val,
+                "delta": delta_val,
+                "mean_step": mean_step,
+                "cycle_corr": corr,
+            })
+
+    trajectory_summary_df = pd.DataFrame(trajectory_summary)
+    trajectory_summary_df = trajectory_summary_df.sort_values(["unit_id", "sensor"]).reset_index(drop=True)
+    trajectory_summary_df
     return
 
 
