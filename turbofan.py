@@ -292,42 +292,50 @@ def _(plt, sns, train_df_rul):
 
 @app.cell
 def _(feature_cols, plt, train_df_rul):
-    # Sequence trajectory check: inspect how selected sensors evolve over time for a few units
+    # Average sensor trajectories across all units
 
-    # Use a deterministic set of units instead of a random sample.
-    _unit_lengths = train_df_rul.groupby("unit_id").size().sort_values(ascending=False)
-    sample_units = _unit_lengths.head(6).index.tolist()
+    ncols = 3
+    nrows = len(feature_cols) // ncols + (len(feature_cols) % ncols > 0)
 
-    # Build average trajectories across units, with variability estimates.
-    trajectory_mean = (
-        train_df_rul.groupby(["unit_id", "cycle"])[feature_cols]
-        .mean()
-        .groupby("cycle")
-        .mean()
-    )
+    fig_sensor_trajectory, axes = plt.subplots(nrows, ncols, figsize=(16, 12), sharex=True)
+    axes_sensor_trajectory = axes.flatten()
 
-    trajectory_std = (
-        train_df_rul.groupby(["unit_id", "cycle"])[feature_cols]
-        .mean()
-        .groupby("cycle")
-        .std()
-    )
+    for ax_sensor_trajectory, sensor_trajectory_col in zip(axes_sensor_trajectory, feature_cols):
+        # Mean and standard deviation for each cycle
+        stats = (
+            train_df_rul
+            .groupby("RUL")[sensor_trajectory_col]
+            .agg(["mean", "std"])
+            .sort_index(ascending=False)   # failure on the right
+            .reset_index()
+        )
 
-    fig_trajectory, axes = plt.subplots(2, 3, figsize=(16, 8), sharey=True)
+        ax_sensor_trajectory.plot(
+            stats["RUL"],
+            stats["mean"],
+            color="C0",
+            linewidth=2,
+            label="Mean"
+        )
 
-    for ax_trajetory, unit in zip(axes.flatten(), sample_units):
-        unit_df = train_df_rul[train_df_rul["unit_id"] == unit].sort_values("cycle")
-        for col_trajectory in feature_cols:
-            ax_trajetory.plot(unit_df["cycle"], unit_df[col_trajectory], label=col_trajectory, alpha=0.8)
-        ax_trajetory.set_title(f"Unit {unit}")
-        ax_trajetory.set_xlabel("Cycle")
-        ax_trajetory.set_ylabel("Value")
-        ax_trajetory.grid(alpha=0.3)
+        ax_sensor_trajectory.fill_between(
+            stats["RUL"],
+            stats["mean"] - stats["std"],
+            stats["mean"] + stats["std"],
+            color="C0",
+            alpha=0.25,
+            label="±1 SD"
+        )
 
-    axes.flatten()[-1].legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=8)
+        ax_sensor_trajectory.set_title(sensor_trajectory_col)
+        ax_sensor_trajectory.set_xlabel("RUL")
+        ax_sensor_trajectory.set_ylabel("Value")
+        ax_sensor_trajectory.grid(alpha=0.3)
+
+    axes_sensor_trajectory[-1].legend(loc="upper left", bbox_to_anchor=(1.02, 1))
     plt.tight_layout()
     plt.show()
-    return (sample_units,)
+    return
 
 
 @app.cell
