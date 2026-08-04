@@ -231,12 +231,13 @@ def _(mo):
 
 
 @app.cell
-def _(test_df, train_df_rul):
+def _(feature_cols, test_df, train_df_rul):
     # Drop least informative features based on correlation analysis
     sensors_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    feature_cols_dropped = [col for col in feature_cols if col not in sensors_to_drop]
     train_df_rul.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
     test_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
-    return
+    return (feature_cols_dropped,)
 
 
 @app.cell
@@ -291,22 +292,22 @@ def _(plt, sns, train_df_rul):
 
 
 @app.cell
-def _(feature_cols, plt, train_df_rul):
+def _(feature_cols_dropped, plt, train_df_rul):
     # Average sensor trajectories across all units
 
     ncols = 3
-    nrows = len(feature_cols) // ncols + (len(feature_cols) % ncols > 0)
+    nrows = len(feature_cols_dropped) // ncols + (len(feature_cols_dropped) % ncols > 0)
 
     fig_sensor_trajectory, axes = plt.subplots(nrows, ncols, figsize=(16, 12), sharex=True)
     axes_sensor_trajectory = axes.flatten()
 
-    for ax_sensor_trajectory, sensor_trajectory_col in zip(axes_sensor_trajectory, feature_cols):
+    for ax_sensor_trajectory, sensor_trajectory_col in zip(axes_sensor_trajectory, feature_cols_dropped):
         # Mean and standard deviation for each cycle
         stats = (
             train_df_rul
             .groupby("RUL")[sensor_trajectory_col]
             .agg(["mean", "std"])
-            .sort_index(ascending=False)   # failure on the right
+            .sort_index(ascending=False)   # False = failure on the right 
             .reset_index()
         )
 
@@ -317,6 +318,8 @@ def _(feature_cols, plt, train_df_rul):
             linewidth=2,
             label="Mean"
         )
+
+        ax_sensor_trajectory.set_xlim(stats["RUL"].max(), 0) # Invert x-axis to match failure on the right
 
         ax_sensor_trajectory.fill_between(
             stats["RUL"],
@@ -335,7 +338,7 @@ def _(feature_cols, plt, train_df_rul):
     axes_sensor_trajectory[-1].legend(loc="upper left", bbox_to_anchor=(1.02, 1))
     plt.tight_layout()
     plt.show()
-    return
+    return (sensor_trajectory_col,)
 
 
 @app.cell
@@ -393,6 +396,20 @@ def _(mo):
     mo.md(r"""
  
     """)
+    return
+
+
+@app.cell
+def _(sensor_trajectory_col, train_df_rul):
+    stats2 = (
+        train_df_rul
+        .groupby("RUL")[sensor_trajectory_col]
+        .agg(["mean", "std"])
+        .sort_index(ascending=False)   # failure on the right
+        .reset_index()
+    )
+
+    stats2.head(10)
     return
 
 
