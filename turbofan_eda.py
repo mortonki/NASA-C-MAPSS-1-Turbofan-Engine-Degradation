@@ -125,7 +125,7 @@ def _(train_df):
 
 @app.cell
 def _(train_df):
-    train_df.describe().T
+    train_df.drop(['cycle'], axis=1).describe().T
     return
 
 
@@ -227,7 +227,7 @@ def _(mo):
 @app.cell
 def _(feature_cols, test_df, train_df_rul):
     # Drop the least informative features based on the analysis
-    sensors_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    sensors_to_drop = ['op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
     feature_cols_dropped = [col for col in feature_cols if col not in sensors_to_drop]
     train_df_rul.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
     test_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context

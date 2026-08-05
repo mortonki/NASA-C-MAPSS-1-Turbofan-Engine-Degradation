@@ -9,7 +9,7 @@ import time
 
 # Hyperparameters
 WINDOW_SIZE = 100
-NUM_FEATURES = 24
+NUM_FEATURES = 17
 HIDDEN_SIZE = 128
 NUM_LAYERS = 2
 BATCH_SIZE = 256
@@ -41,6 +41,9 @@ def main():
     
     print("Loading and preprocessing data...")
     train_df, test_df, label_df = load_data(base_path)
+    sensors_to_drop = ['op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    train_df.drop(columns=sensors_to_drop, inplace=True) # Drop the least informative features based on EDA
+    test_df.drop(columns=sensors_to_drop, inplace=True)
     train_df = calculate_train_rul(train_df)
     train_df, test_df = normalize_data(train_df, test_df)
     

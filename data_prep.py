@@ -40,13 +40,13 @@ def calculate_train_rul(train_df):
     train_df['RUL'] = train_df['_max_cycle'] - train_df['cycle']
 
     # Drop the temporary column as it's no longer needed, utilizing the utility function for consistency
-    train_df = drop_columns(train_df, ['_max_cycle'])
+    train_df.drop(columns=['_max_cycle'], inplace=True)
     
     return train_df
 
 def normalize_data(train_df, test_df):
     # We only want to normalize the sensor columns
-    sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
+    sensor_cols = [col for col in train_df.columns if col.startswith('sensor_')]
     
     scaler = StandardScaler()
     # Fit on training data and transform both datasets (Standardization)
@@ -62,8 +62,9 @@ def normalize_data(train_df, test_df):
 def create_sliding_windows(df, window_size=30):
     # This function will return a list of windows
     # Each window is a numpy array of shape (window_size, num_features)
-    sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
-    op_cond_cols = ['op_cond_1', 'op_cond_2', 'op_cond_3']
+    # Dynamically select sensor columns present in the dataframe being processed (df)
+    sensor_cols = [col for col in df.columns if col.startswith('sensor_')]
+    op_cond_cols = [col for col in df.columns if col.startswith('op_cond_')]
     feature_cols = sensor_cols + op_cond_cols
     
     windows = []
