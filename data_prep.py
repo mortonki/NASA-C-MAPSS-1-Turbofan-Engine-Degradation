@@ -3,6 +3,13 @@ import numpy as np
 import os
 from sklearn.preprocessing import StandardScaler
 
+def drop_columns(df, cols_to_drop):
+    """Drop specified columns from dataframe."""
+    for col in cols_to_drop:  # Check column exists first to avoid errors
+        if col in df.columns: 
+            df.drop(columns=[col], inplace=True)
+    return df
+
 def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
     # Capping values based on percentiles derived from the training distribution (or provided bounds)
     for col in cols:
@@ -10,7 +17,7 @@ def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
         upper_bound = df[col].quantile(upper)
         df[col] = np.where(df[col] < lower_bound, lower_bound, df[col])
         df[col] = np.where(df[col] > upper_bound, upper_bound, df[col])
-        return df # Added return statement to satisfy linter/user feedback
+    return df # Moved return outside the loop to process all columns
 
 def load_data(base_path):
     cols = ['unit_id', 'cycle', 'op_cond_1', 'op_cond_2', 'op_cond_3'] + [f'sensor_{i}' for i in range(1, 22)]
@@ -22,18 +29,18 @@ def load_data(base_path):
     return train_df, test_df, label_df
 
 def calculate_train_rul(train_df):
-    # Group by unit_id and find the max cycle for each unit
+    # Group by unit_id and find the max cycle for each unit, renaming to _max_cycle immediately
     max_cycles = train_df.groupby('unit_id')['cycle'].max().reset_index()
-    max_cycles.columns = ['unit_id', 'max_cycle']
+    max_cycles.columns = ['unit_id', '_max_cycle']
     
-    # Merge back to the original dataframe
+    # Merge back to the original dataframe using the renamed column
     train_df = train_df.merge(max_cycles, on='unit_id')
     
-    # Calculate RUL (Running down from total life)
-    train_df['RUL'] = train_df['max_cycle'] - train_df['cycle']
+    # Calculate RUL (Running down from total life) using the new name
+    train_df['RUL'] = train_df['_max_cycle'] - train_df['cycle']
 
-    # Drop the max_cycle column as it's no longer needed
-    train_df.drop(columns=['max_cycle'], inplace=True)
+    # Drop the temporary column as it's no longer needed, utilizing the utility function for consistency
+    train_df = drop_columns(train_df, ['_max_cycle'])
     
     return train_df
 
