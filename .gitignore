@@ -18,8 +18,5 @@ wheels/
 # PDF files
 *.pdf
 
-# Text files
-*.txt
-
 # Model files
 *.pth

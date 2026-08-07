@@ -35,8 +35,6 @@ uv venv
 
 Do not read anything in the directory `archive`.
 
-Do not plan more than the user prompt suggests. 
-
 Check the number of lines before reading tabular data files (e.g. *.csv). If the file has more than 50 lines, ask permission to read it. 
 
 Do not attempt to use replace_in_file in PLAN MODE. Ask to switch to ACT MODE.

@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from data_prep import load_data, calculate_train_rul, normalize_data, create_sliding_windows
 import time
+import mlflow
+import mlflow.pytorch
 
 # Hyperparameters
 WINDOW_SIZE = 100
@@ -38,6 +40,9 @@ class LSTMModel(nn.Module):
 
 def main():
     base_path = '/home/mordicus/.cache/kagglehub/datasets/bishals098/nasa-turbofan-engine-degradation-simulation/versions/1'
+    
+    # Initialize MLflow tracking
+    mlflow.set_experiment("LSTM_RUL_Prediction")
     
     print("Loading and preprocessing data...")
     train_df, test_df, label_df = load_data(base_path)
@@ -73,8 +78,22 @@ def main():
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     
-    model.train()
-    start_time = time.time()
+    # Log hyperparameters to MLflow and train
+    with mlflow.start_run():
+        mlflow.log_param("window_size", WINDOW_SIZE)
+        mlflow.log_param("num_features", NUM_FEATURES)
+        mlflow.log_param("hidden_size", HIDDEN_SIZE)
+        mlflow.log_param("num_layers", NUM_LAYERS)
+        mlflow.log_param("batch_size", BATCH_SIZE)
+        mlflow.log_param("learning_rate", LEARNING_RATE)
+        mlflow.log_param("epochs", EPOCHS)
+        mlflow.log_param("device", DEVICE)
+        mlflow.log_metric("train_samples", len(train_loader))
+        mlflow.log_metric("test_samples", len(test_windows))
+        
+        model.train()
+        start_time = time.time()
+    
     for epoch in range(EPOCHS):
         total_loss = 0
         for batch_x, batch_y in train_loader:
@@ -87,10 +106,13 @@ def main():
             total_loss += loss.item()
         
         if (epoch + 1) % 10 == 0:
-            print(f"Epoch [{epoch+1}/{EPOCHS}], Loss: {total_loss/len(train_loader):.4f}")
+            avg_loss = total_loss / len(train_loader)
+            print(f"Epoch [{epoch+1}/{EPOCHS}], Loss: {avg_loss:.4f}")
+            mlflow.log_metric("loss", avg_loss)
     
     end_time = time.time()
-    print(f"Training completed in {end_time - start_time:.2f} seconds.")
+    training_time = end_time - start_time
+    print(f"Training completed in {training_time:.2f} seconds.")
     
     # Evaluation
     model.eval()
@@ -102,7 +124,12 @@ def main():
         # Calculate RMSE
         rmse = np.sqrt(mse.item())
         print(f"Test RMSE: {rmse:.4f}")
-        
+    
+    # Log evaluation metrics to MLflow
+    mlflow.log_metric("test_mse", mse.item())
+    mlflow.log_metric("test_rmse", rmse)
+    mlflow.log_metric("training_time_seconds", training_time)
+    
     # Save the model
     torch.save(model.state_dict(), 'lstm_model.pth')
     print("Model saved to lstm_model.pth")
