@@ -137,13 +137,6 @@ def _(test_df, train_df):
 
 
 @app.cell
-def _(train_df):
-    # Index the training dataframe by 'unit_id' for easier access and analysis
-    train_df.set_index('unit_id', inplace=True)
-    return
-
-
-@app.cell
 def _(calculate_train_rul, train_df):
     # Calculate RUL for training set before EDA checks
     train_df_rul = calculate_train_rul(train_df=train_df.copy())
@@ -151,9 +144,23 @@ def _(calculate_train_rul, train_df):
 
 
 @app.cell
-def _(train_df):
+def _(train_df_rul):
+    # Sanity check: Display the maximum RUL for each unit in the training set
+    train_df_rul.groupby("unit_id")['RUL'].max()
+    return
+
+
+@app.cell
+def _(train_df_rul):
+    # Index the training dataframe by 'unit_id' for easier access and analysis
+    train_df_rul.set_index('unit_id', inplace=True)
+    return
+
+
+@app.cell
+def _(train_df_rul):
     # Select only feature columns (excluding 'RUL') from the processed train_df.
-    feature_cols = [col for col in train_df.columns if col not in ['unit_id', 'cycle']]
+    feature_cols = [col for col in train_df_rul.columns if col not in ['unit_id', 'cycle', 'RUL']]
     return (feature_cols,)
 
 
@@ -210,8 +217,7 @@ def _(feature_cols, pd, sm, train_df_rul):
             vif_dict[col] = round(vif, 2)
         return vif_dict
     vif_results = calculate_vif(train_df_rul[feature_cols])
-    vif_df = pd.DataFrame.from_dict(vif_results, orient='index', columns=['VIF'])
-    print('\nVIF DataFrame:')
+    vif_df = pd.Series(vif_results).to_frame(name='VIF')
     vif_df.T
     return
 
@@ -365,10 +371,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(r"""
- 
-    """)
+def _():
     return
 
 

@@ -36,7 +36,7 @@ def calculate_train_rul(train_df):
     # Merge back to the original dataframe using the renamed column
     train_df = train_df.merge(max_cycles, on='unit_id')
     
-    # Calculate RUL (Running down from total life) using the new name
+    # Calculate RUL (Running down from total life) from max_cycle minus the current cycle, using the temporary _max_cycle column
     train_df['RUL'] = train_df['_max_cycle'] - train_df['cycle']
 
     # Drop the temporary column as it's no longer needed, utilizing the utility function for consistency
