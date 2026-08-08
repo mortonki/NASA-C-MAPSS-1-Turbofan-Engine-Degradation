@@ -7,17 +7,16 @@ import pandas as pd
 from data_prep import load_data, calculate_train_rul, normalize_data, create_sliding_windows
 import time
 import mlflow
-import mlflow.pytorch
 
 # Hyperparameters
-WINDOW_SIZE = 100
+WINDOW_SIZE = 30
 NUM_FEATURES = 17
 HIDDEN_SIZE = 128
-NUM_LAYERS = 2
-BATCH_SIZE = 256
+NUM_LAYERS = 4
+BATCH_SIZE = 128
 LEARNING_RATE = 0.001
 EPOCHS = 100
-DEVICE = torch.device("cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size):
@@ -42,8 +41,10 @@ def main():
     base_path = '/home/mordicus/.cache/kagglehub/datasets/bishals098/nasa-turbofan-engine-degradation-simulation/versions/1'
     
     # Initialize MLflow tracking
+    mlflow.set_tracking_uri("sqlite:///mlruns.db")
     mlflow.set_experiment("LSTM_RUL_Prediction")
     
+    # Load and preprocess data
     print("Loading and preprocessing data...")
     train_df, test_df, label_df = load_data(base_path)
     sensors_to_drop = ['op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
@@ -88,51 +89,52 @@ def main():
         mlflow.log_param("learning_rate", LEARNING_RATE)
         mlflow.log_param("epochs", EPOCHS)
         mlflow.log_param("device", DEVICE)
-        mlflow.log_metric("train_samples", len(train_loader))
+        mlflow.log_metric("train_samples", len(train_windows))
         mlflow.log_metric("test_samples", len(test_windows))
         
         model.train()
         start_time = time.time()
     
-    for epoch in range(EPOCHS):
-        total_loss = 0
-        for batch_x, batch_y in train_loader:
-            batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
-            optimizer.zero_grad()
-            output = model(batch_x)
-            loss = criterion(output, batch_y)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+        for epoch in range(EPOCHS):
+            total_loss = 0
+            for batch_x, batch_y in train_loader:
+                batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
+                optimizer.zero_grad()
+                output = model(batch_x)
+                loss = criterion(output, batch_y)
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item()
+            
+            if (epoch + 1) % 10 == 0:
+                avg_loss = total_loss / len(train_loader)
+                print(f"Epoch [{epoch+1}/{EPOCHS}], Loss: {avg_loss:.4f}")
+                mlflow.log_metric("loss", avg_loss)
+    
+        end_time = time.time()
+        training_time = end_time - start_time
+        mlflow.log_metric("training_time_seconds", training_time)
+
+        # Save the model
+        #torch.save(model.state_dict(), 'lstm_model.pth')
+        #print("Model saved to lstm_model.pth")
+
+        print(f"Training completed in {training_time:.2f} seconds.")
         
-        if (epoch + 1) % 10 == 0:
-            avg_loss = total_loss / len(train_loader)
-            print(f"Epoch [{epoch+1}/{EPOCHS}], Loss: {avg_loss:.4f}")
-            mlflow.log_metric("loss", avg_loss)
-    
-    end_time = time.time()
-    training_time = end_time - start_time
-    print(f"Training completed in {training_time:.2f} seconds.")
-    
-    # Evaluation
-    model.eval()
-    with torch.no_grad():
-        predictions = model(X_test.to(DEVICE))
-        mse = criterion(predictions, y_test.to(DEVICE))
-        print(f"Test MSE: {mse.item():.4f}")
+        # Evaluation
+        model.eval()
+        with torch.no_grad():
+            predictions = model(X_test.to(DEVICE))
+            mse = criterion(predictions, y_test.to(DEVICE))
+            print(f"Test MSE: {mse.item():.4f}")
+            
+            # Calculate RMSE
+            rmse = np.sqrt(mse.item())
+            print(f"Test RMSE: {rmse:.4f}")
         
-        # Calculate RMSE
-        rmse = np.sqrt(mse.item())
-        print(f"Test RMSE: {rmse:.4f}")
-    
-    # Log evaluation metrics to MLflow
-    mlflow.log_metric("test_mse", mse.item())
-    mlflow.log_metric("test_rmse", rmse)
-    mlflow.log_metric("training_time_seconds", training_time)
-    
-    # Save the model
-    torch.save(model.state_dict(), 'lstm_model.pth')
-    print("Model saved to lstm_model.pth")
+        # Log evaluation metrics to MLflow
+        mlflow.log_metric("test_mse", mse.item())
+        mlflow.log_metric("test_rmse", rmse)
 
 if __name__ == "__main__":
     main()

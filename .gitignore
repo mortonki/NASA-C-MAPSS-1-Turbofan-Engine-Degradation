@@ -20,3 +20,10 @@ wheels/
 
 # Model files
 *.pth
+
+# MLflow files
+mlruns/
+*.db
+
+# Documentation files
+docs/
