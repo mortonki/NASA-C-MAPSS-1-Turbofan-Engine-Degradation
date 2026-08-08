@@ -7,8 +7,9 @@ import pandas as pd
 from data_prep import load_data, calculate_train_rul, normalize_data, create_sliding_windows
 import time
 import mlflow
+import argparse
 
-# Hyperparameters
+# Default hyperparameters
 WINDOW_SIZE = 30
 NUM_FEATURES = 17
 HIDDEN_SIZE = 128
@@ -16,7 +17,7 @@ NUM_LAYERS = 4
 BATCH_SIZE = 128
 LEARNING_RATE = 0.001
 EPOCHS = 100
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size):
@@ -37,7 +38,47 @@ class LSTMModel(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
+def build_parser():
+    parser = argparse.ArgumentParser(description="Train an LSTM model for RUL prediction")
+    parser.add_argument("--window-size", type=int, default=WINDOW_SIZE,
+                        help="Size of the sliding window")
+    parser.add_argument("--num-features", type=int, default=NUM_FEATURES,
+                        help="Number of input features per time step")
+    parser.add_argument("--hidden-size", type=int, default=HIDDEN_SIZE,
+                        help="Hidden size of the LSTM")
+    parser.add_argument("--num-layers", type=int, default=NUM_LAYERS,
+                        help="Number of stacked LSTM layers")
+    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE,
+                        help="Batch size for training")
+    parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE,
+                        help="Learning rate for the optimizer")
+    parser.add_argument("--epochs", type=int, default=EPOCHS,
+                        help="Number of epochs to train")
+
+    # Optional: let user override device
+    parser.add_argument(
+        "--device",
+        choices=["cpu", "cuda"],
+        default=DEVICE,
+        help="Device to run on (default inferred from CUDA availability)",
+    )
+    return parser
+
 def main():
+    # Build the parser with default hyperparameters and parse command line arguments
+    parser = build_parser()
+    args = parser.parse_args()
+
+    # Update hyperparameters from command line arguments
+    WINDOW_SIZE = args.window_size
+    NUM_FEATURES = args.num_features
+    HIDDEN_SIZE = args.hidden_size
+    NUM_LAYERS = args.num_layers
+    BATCH_SIZE = args.batch_size
+    LEARNING_RATE = args.learning_rate
+    EPOCHS = args.epochs
+    DEVICE = args.device
+
     base_path = '/home/mordicus/.cache/kagglehub/datasets/bishals098/nasa-turbofan-engine-degradation-simulation/versions/1'
     
     # Initialize MLflow tracking
