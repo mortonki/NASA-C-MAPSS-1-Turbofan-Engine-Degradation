@@ -15,9 +15,11 @@ def _():
     import seaborn as sns
     import statsmodels.api as sm
     import marimo as mo
+    from sklearn.cluster import KMeans
     from data_prep import load_data, calculate_train_rul, normalize_data, apply_outlier_capping, create_sliding_windows
 
     return (
+        KMeans,
         Path,
         calculate_train_rul,
         kagglehub,
@@ -160,7 +162,7 @@ def _(train_df_rul):
 @app.cell
 def _(train_df_rul):
     # Select only feature columns (excluding 'RUL') from the processed train_df.
-    feature_cols = [col for col in train_df_rul.columns if col not in ['unit_id', 'cycle', 'RUL']]
+    feature_cols = [col for col in train_df_rul.columns if col not in ['unit_id', 'cycle', 'RUL', 'op_cond_1', 'op_cond_2', 'op_cond_3']]
     return (feature_cols,)
 
 
@@ -233,7 +235,7 @@ def _(mo):
 @app.cell
 def _(feature_cols, test_df, train_df_rul):
     # Drop the least informative features based on the analysis
-    sensors_to_drop = ['op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    sensors_to_drop = ['sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
     feature_cols_dropped = [col for col in feature_cols if col not in sensors_to_drop]
     train_df_rul.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
     test_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
@@ -367,6 +369,37 @@ def _(mo):
     mo.md(r"""
     Some sensors have values in test set that are out train range. This is an issue to consider in model generalization.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Based on the documentation provided with the dataset, six different flight conditions were simulated that comprised of a range of values for three operational conditions: altitude (0-42K ft.), Mach number (0-0.84), and TRA (20-100).
+    """)
+    return
+
+
+@app.cell
+def _(train_df_rul):
+    # Select operational condition columns for further analysis
+    op_cond_cols = ['op_cond_1', 'op_cond_2', 'op_cond_3']
+    train_df_op = train_df_rul[op_cond_cols].copy()
+    return (train_df_op,)
+
+
+@app.cell
+def _(KMeans, train_df_op):
+    # Cluster and visualize operating conditions columns. 
+    kmeans = KMeans(n_clusters = 6,random_state = 42) # 6 clusters for the six different flight conditions in the dataset. This is based on domain knowledge  of the operational condition features.
+    train_df_op['op_clusters']  = kmeans.fit_predict(train_df_op)
+    #test_df['op_clusters'] = kmeans.predict(test_df[train_df_op])
+    return
+
+
+@app.cell
+def _(train_df_op):
+    train_df_op
     return
 
 

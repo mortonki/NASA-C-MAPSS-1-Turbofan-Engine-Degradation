@@ -11,10 +11,10 @@ import argparse
 
 # Default hyperparameters
 WINDOW_SIZE = 30
-NUM_FEATURES = 17
+NUM_FEATURES = 15
 HIDDEN_SIZE = 128
 NUM_LAYERS = 4
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 LEARNING_RATE = 0.001
 EPOCHS = 100
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -88,9 +88,9 @@ def main():
     # Load and preprocess data
     print("Loading and preprocessing data...")
     train_df, test_df, label_df = load_data(base_path)
-    sensors_to_drop = ['op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
-    train_df.drop(columns=sensors_to_drop, inplace=True) # Drop the least informative features based on EDA
-    test_df.drop(columns=sensors_to_drop, inplace=True)
+    columns_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    train_df.drop(columns=columns_to_drop, inplace=True) # Drop the least informative features based on EDA
+    test_df.drop(columns=columns_to_drop, inplace=True)
     train_df = calculate_train_rul(train_df)
     train_df, test_df = normalize_data(train_df, test_df)
     
