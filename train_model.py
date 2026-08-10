@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import pandas as pd
-from data_prep import load_data, calculate_train_rul, normalize_data, create_sliding_windows
+from data_prep import load_data, calculate_train_rul, normalize_data, create_sliding_windows, split_train_val
 import time
 import mlflow
 import argparse
@@ -16,7 +16,7 @@ HIDDEN_SIZE = 128
 NUM_LAYERS = 2
 BATCH_SIZE = 64
 LEARNING_RATE = 0.00025
-EPOCHS = 150
+EPOCHS = 10
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTMModel(nn.Module):

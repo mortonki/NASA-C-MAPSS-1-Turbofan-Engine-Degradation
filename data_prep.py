@@ -19,6 +19,25 @@ def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
         df[col] = np.where(df[col] > upper_bound, upper_bound, df[col])
     return df # Moved return outside the loop to process all columns
 
+def split_train_val(train_df, val_split=0.2):
+    """
+    Splits the training dataframe into train and validation sets based on unit_id.
+    Ensures that no unit_id exists in both sets.
+    """
+    unique_units = train_df['unit_id'].unique()
+    np.random.seed(42)  # For reproducibility
+    np.random.shuffle(unique_units)
+    
+    split_idx = int(len(unique_units) * (1 - val_split))
+    train_units = unique_units[:split_idx]
+    val_units = unique_units[split_idx:]
+    
+    train_df_split = train_df[train_df['unit_id'].isin(train_units)].copy()
+    val_df_split = train_df[train_df['unit_id'].isin(val_units)].copy()
+    
+    return train_df_split, val_df_split
+
+
 def load_data(base_path):
     cols = ['unit_id', 'cycle', 'op_cond_1', 'op_cond_2', 'op_cond_3'] + [f'sensor_{i}' for i in range(1, 22)]
     
@@ -97,13 +116,18 @@ def main():
     print(f"Test data shape: {test_df.shape}")
     print(f"Label data shape: {label_df.shape}")
     
-    # 1. Calculate RUL for training set (Running down from total life)
+    # Calculate RUL for training set (Running down from total life)
     train_df = calculate_train_rul(train_df)
+
+    # Dynamically select remaining sensor columns present in the train dataframe
+    sensor_cols = [col for col in train_df.columns if col.startswith('sensor_')]
+    op_cond_cols = [col for col in train_df.columns if col.startswith('op_cond_')]
+    feature_cols = sensor_cols + op_cond_cols
     
-    # 2. Normalize sensor data and apply capping to mitigate MinMax shifts
+    # Normalize sensor data and apply capping to mitigate MinMax shifts
     train_df, test_df = normalize_data(train_df, test_df)
     
-    # 3. Align test RULs (FIX APPLIED: Test RUL is now constant ground truth value for evaluation)
+    # 3. Align test RULs
     unique_units = test_df['unit_id'].unique()
     print(f"Unique units in test set: {len(unique_units)}")
     
@@ -113,12 +137,12 @@ def main():
     # Add RUL to test_df using the constant ground truth value for evaluation purposes.
     test_df['RUL'] = test_df['unit_id'].map(rul_mapping) 
     
-    # 4. Create sliding windows (This step now uses the corrected RUL in test_df)
+    # Create sliding windows (This step now uses the corrected RUL in test_df)
     window_size = 30
     print(f"Creating sliding windows with size {window_size}...")
     
-    train_windows, train_targets = create_sliding_windows(train_df, window_size)
-    test_windows, test_targets = create_sliding_windows(test_df, window_size)
+    train_windows, train_targets = create_sliding_windows(train_df, feature_cols, window_size)
+    test_windows, test_targets = create_sliding_windows(test_df, feature_cols, window_size)
     
     # Let's check the shapes
     print(f"Train windows shape: {train_windows.shape}")
