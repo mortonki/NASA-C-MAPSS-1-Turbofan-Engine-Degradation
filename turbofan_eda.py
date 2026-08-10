@@ -266,14 +266,22 @@ def _(mo):
 @app.cell
 def _(feature_cols, train_df_rul):
     # Sensor correlation analysis: Identify and visualize the correlation of each sensor with RUL to determine their predictive power.
-    correlations = train_df_rul[feature_cols + ['RUL']].corr()['RUL'].abs().sort_values(ascending=False)
-    correlations
+    correlations = train_df_rul[feature_cols + ['RUL']].corr()['RUL'].drop("RUL").sort_values(ascending=False)
+    corr_df = correlations.reset_index()
+    corr_df.columns = ["sensor", "correlation_with_RUL"]
 
-    return
+    return (corr_df,)
 
 
 @app.cell
-def _():
+def _(corr_df, plt):
+    plt.figure(figsize=(10,6))
+    plt.barh(corr_df["sensor"], corr_df["correlation_with_RUL"])
+    plt.axvline(0, color="black")
+    plt.xlabel("Correlation with RUL")
+    plt.title("Sensor Correlations with Remaining Useful Life")
+    plt.gca().invert_yaxis()
+    plt.show()
     return
 
 

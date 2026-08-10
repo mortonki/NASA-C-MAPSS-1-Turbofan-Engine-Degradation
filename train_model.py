@@ -10,10 +10,10 @@ import mlflow
 import argparse
 
 # Default hyperparameters
-WINDOW_SIZE = 70
+WINDOW_SIZE = 80
 NUM_FEATURES = 14
 HIDDEN_SIZE = 128
-NUM_LAYERS = 3
+NUM_LAYERS = 2
 BATCH_SIZE = 64
 LEARNING_RATE = 0.00025
 EPOCHS = 150
