@@ -10,13 +10,13 @@ import mlflow
 import argparse
 
 # Default hyperparameters
-WINDOW_SIZE = 30
-NUM_FEATURES = 15
+WINDOW_SIZE = 70
+NUM_FEATURES = 14
 HIDDEN_SIZE = 128
-NUM_LAYERS = 4
+NUM_LAYERS = 3
 BATCH_SIZE = 64
-LEARNING_RATE = 0.001
-EPOCHS = 100
+LEARNING_RATE = 0.00025
+EPOCHS = 150
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTMModel(nn.Module):
@@ -85,12 +85,21 @@ def main():
     mlflow.set_tracking_uri("sqlite:///mlruns.db")
     mlflow.set_experiment("LSTM_RUL_Prediction")
     
-    # Load and preprocess data
+     # Load data
     print("Loading and preprocessing data...")
     train_df, test_df, label_df = load_data(base_path)
-    columns_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
-    train_df.drop(columns=columns_to_drop, inplace=True) # Drop the least informative features based on EDA
+
+    # Drop columns based on EDA findings to reduce noise and improve model performance
+    columns_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_6','sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    train_df.drop(columns=columns_to_drop, inplace=True)
     test_df.drop(columns=columns_to_drop, inplace=True)
+
+    # Dynamically select remaining sensor columns present in the train dataframe
+    sensor_cols = [col for col in train_df.columns if col.startswith('sensor_')]
+    op_cond_cols = [col for col in train_df.columns if col.startswith('op_cond_')]
+    feature_cols = sensor_cols + op_cond_cols
+
+    # Preprocess data
     train_df = calculate_train_rul(train_df)
     train_df, test_df = normalize_data(train_df, test_df)
     
@@ -104,8 +113,8 @@ def main():
     test_df['RUL'] = test_df.apply(lambda row: rul_mapping[row['unit_id']] + (row['max_cycle_test'] - row['cycle']), axis=1)
     
     print(f"Creating sliding windows...")
-    train_windows, train_targets = create_sliding_windows(train_df, WINDOW_SIZE)
-    test_windows, test_targets = create_sliding_windows(test_df, WINDOW_SIZE)
+    train_windows, train_targets = create_sliding_windows(train_df, feature_cols, WINDOW_SIZE)
+    test_windows, test_targets = create_sliding_windows(test_df, feature_cols, WINDOW_SIZE)
     
     # Convert to tensors
     X_train = torch.FloatTensor(train_windows)

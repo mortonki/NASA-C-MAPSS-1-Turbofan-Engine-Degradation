@@ -16,6 +16,7 @@ def _():
     import statsmodels.api as sm
     import marimo as mo
     from sklearn.cluster import KMeans
+    from mpl_toolkits.mplot3d import Axes3D # Required for 3D plotting in Matplotlib
     from data_prep import load_data, calculate_train_rul, normalize_data, apply_outlier_capping, create_sliding_windows
 
     return (
@@ -147,8 +148,8 @@ def _(calculate_train_rul, train_df):
 
 @app.cell
 def _(train_df_rul):
-    # Sanity check: Display the maximum RUL for each unit in the training set
-    train_df_rul.groupby("unit_id")['RUL'].max()
+    # Sanity check: final row for each engine should have RUL = 0
+    train_df_rul.groupby("unit_id")["RUL"].min().value_counts()
     return
 
 
@@ -263,16 +264,16 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # Dynamically determine features to drop based on low correlation with RUL (mimicking previous logic but making it robust)
-    #correlations = train_df_1.drop(['cycle', 'unit_id'], axis=1).corr()['RUL'].abs().sort_values(ascending=False)
-    #least_informative = correlations.tail(10).index.tolist() # Get the names of the 10 least informative features
-    #print(f"Dropping least informative features: {least_informative}")
+def _(feature_cols, train_df_rul):
+    # Sensor correlation analysis: Identify and visualize the correlation of each sensor with RUL to determine their predictive power.
+    correlations = train_df_rul[feature_cols + ['RUL']].corr()['RUL'].abs().sort_values(ascending=False)
+    correlations
 
-    # Apply dropping only if columns exist in train_df_1 (and assuming test_df_1 is available/passed correctly in execution flow)
-    #cols_to_drop = [col for col in least_informative if col in train_df_1.columns]
-    #train_df_1.drop(columns=cols_to_drop, inplace=True)
-    # NOTE: In a real Marimo environment, we would need to pass test_df_1 here too. For this fix, I focus on making the logic robust for train_df_1 based on available context.
+    return
+
+
+@app.cell
+def _():
     return
 
 
@@ -346,7 +347,7 @@ def _(feature_cols_dropped, plt, train_df_rul):
 @app.cell
 def _(mo):
     mo.md(r"""
-    The remaining sensors show clear trajectories towards failure values as RUL runs down to zero. This justifies using sequence models.
+    Except for the sensor 6, the remaining sensors show clear trajectories towards failure values as RUL runs down to zero. This justifies using sequence models.
     """)
     return
 
@@ -390,16 +391,11 @@ def _(train_df_rul):
 
 @app.cell
 def _(KMeans, train_df_op):
-    # Cluster and visualize operating conditions columns. 
+    # Cluster operating conditions columns. 
     kmeans = KMeans(n_clusters = 6,random_state = 42) # 6 clusters for the six different flight conditions in the dataset. This is based on domain knowledge  of the operational condition features.
     train_df_op['op_clusters']  = kmeans.fit_predict(train_df_op)
     #test_df['op_clusters'] = kmeans.predict(test_df[train_df_op])
-    return
-
-
-@app.cell
-def _(train_df_op):
-    train_df_op
+    train_df_op.head(1)
     return
 
 

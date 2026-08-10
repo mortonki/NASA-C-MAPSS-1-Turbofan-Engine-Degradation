@@ -59,13 +59,9 @@ def normalize_data(train_df, test_df):
     
     return train_df, test_df
 
-def create_sliding_windows(df, window_size=30):
+def create_sliding_windows(df, feature_cols, window_size=30):
     # This function will return a list of windows
     # Each window is a numpy array of shape (window_size, num_features)
-    # Dynamically select sensor columns present in the dataframe being processed (df)
-    sensor_cols = [col for col in df.columns if col.startswith('sensor_')]
-    op_cond_cols = [col for col in df.columns if col.startswith('op_cond_')]
-    feature_cols = sensor_cols + op_cond_cols
     
     windows = []
     targets = []
