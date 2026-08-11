@@ -10,9 +10,9 @@ import mlflow
 import argparse
 
 # Default hyperparameters
-WINDOW_SIZE = 80
+WINDOW_SIZE = 30
 NUM_FEATURES = 14
-HIDDEN_SIZE = 128
+HIDDEN_SIZE = 64
 NUM_LAYERS = 2
 BATCH_SIZE = 64
 LEARNING_RATE = 0.00025
@@ -101,8 +101,9 @@ def main():
 
     # Preprocess data
     train_df = calculate_train_rul(train_df)
-    train_df, test_df = normalize_data(train_df, test_df)
-    
+    train_df, val_df = split_train_val(train_df)
+    train_df, test_df, val_df = normalize_data(train_df, test_df, val_df)
+        
     # Align test RULs
     unique_units = test_df['unit_id'].unique()
     rul_mapping = dict(zip(unique_units, label_df['RUL'].values))
@@ -114,6 +115,7 @@ def main():
     
     print(f"Creating sliding windows...")
     train_windows, train_targets = create_sliding_windows(train_df, feature_cols, WINDOW_SIZE)
+    val_windows, val_targets = create_sliding_windows(val_df, feature_cols, WINDOW_SIZE)
     test_windows, test_targets = create_sliding_windows(test_df, feature_cols, WINDOW_SIZE)
     
     # Convert to tensors
@@ -121,8 +123,11 @@ def main():
     y_train = torch.FloatTensor(train_targets).view(-1, 1)
     X_test = torch.FloatTensor(test_windows)
     y_test = torch.FloatTensor(test_targets).view(-1, 1)
+    X_val = torch.FloatTensor(val_windows)
+    y_val = torch.FloatTensor(val_targets).view(-1, 1)
     
     train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(TensorDataset(X_val, y_val), batch_size=BATCH_SIZE, shuffle=False)
     
     print(f"Training LSTM model on {DEVICE}...")
     model = LSTMModel(NUM_FEATURES, HIDDEN_SIZE, NUM_LAYERS, 1).to(DEVICE)
@@ -146,7 +151,7 @@ def main():
         start_time = time.time()
     
         for epoch in range(EPOCHS):
-            total_loss = 0
+            total_train_loss = 0
             for batch_x, batch_y in train_loader:
                 batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
                 optimizer.zero_grad()
@@ -154,12 +159,25 @@ def main():
                 loss = criterion(output, batch_y)
                 loss.backward()
                 optimizer.step()
-                total_loss += loss.item()
+                total_train_loss += loss.item()
+            
+            model.eval()
+            total_val_loss = 0
+            with torch.no_grad():
+                for batch_x, batch_y in val_loader:
+                    batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
+                    output = model(batch_x)
+                    loss = criterion(output, batch_y)
+                    total_val_loss += loss.item()
             
             if (epoch + 1) % 10 == 0:
-                avg_loss = total_loss / len(train_loader)
-                print(f"Epoch [{epoch+1}/{EPOCHS}], Loss: {avg_loss:.4f}")
-                mlflow.log_metric("loss", avg_loss)
+                avg_train_loss = total_train_loss / len(train_loader)
+                avg_val_loss = total_val_loss / len(val_loader)
+                print(f"Epoch [{epoch+1}/{EPOCHS}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+                mlflow.log_metric("train_loss", avg_train_loss)
+                mlflow.log_metric("val_loss", avg_val_loss)
+            
+            model.train()
     
         end_time = time.time()
         training_time = end_time - start_time

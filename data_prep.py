@@ -63,7 +63,7 @@ def calculate_train_rul(train_df):
     
     return train_df
 
-def normalize_data(train_df, test_df):
+def normalize_data(train_df, test_df, val_df=None):
     # We only want to normalize the sensor columns
     sensor_cols = [col for col in train_df.columns if col.startswith('sensor_')]
     
@@ -71,11 +71,19 @@ def normalize_data(train_df, test_df):
     # Fit on training data and transform both datasets (Standardization)
     train_df[sensor_cols] = scaler.fit_transform(train_df[sensor_cols])
     test_df[sensor_cols] = scaler.transform(test_df[sensor_cols])
+    
+    if val_df is not None:
+        val_df[sensor_cols] = scaler.transform(val_df[sensor_cols])
 
     # Apply Outlier Capping (Winsorizing) based on training data distribution to mitigate MinMax shifts
     apply_outlier_capping(train_df, sensor_cols, lower=0.01, upper=0.99)
     apply_outlier_capping(test_df, sensor_cols, lower=0.01, upper=0.99)
     
+    if val_df is not None:
+        apply_outlier_capping(val_df, sensor_cols, lower=0.01, upper=0.99)
+    
+    if val_df is not None:
+        return train_df, test_df, val_df
     return train_df, test_df
 
 def create_sliding_windows(df, feature_cols, window_size=30):
