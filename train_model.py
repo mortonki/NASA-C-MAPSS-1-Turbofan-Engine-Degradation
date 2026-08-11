@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import pandas as pd
@@ -15,7 +17,7 @@ NUM_FEATURES = 14
 HIDDEN_SIZE = 64
 NUM_LAYERS = 2
 BATCH_SIZE = 64
-LEARNING_RATE = 0.00025
+LEARNING_RATE = 1e-3
 EPOCHS = 10
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -54,6 +56,9 @@ def build_parser():
                         help="Learning rate for the optimizer")
     parser.add_argument("--epochs", type=int, default=EPOCHS,
                         help="Number of epochs to train")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
+
 
     # Optional: let user override device
     parser.add_argument(
@@ -79,14 +84,20 @@ def main():
     EPOCHS = args.epochs
     DEVICE = args.device
 
-    base_path = '/home/mordicus/.cache/kagglehub/datasets/bishals098/nasa-turbofan-engine-degradation-simulation/versions/1'
-    
+    # Set random seeds for reproducibility
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
+        if DEVICE == "cuda":
+            torch.cuda.manual_seed_all(args.seed)
+
     # Initialize MLflow tracking
     mlflow.set_tracking_uri("sqlite:///mlruns.db")
     mlflow.set_experiment("LSTM_RUL_Prediction")
     
      # Load data
     print("Loading and preprocessing data...")
+    base_path = '/home/mordicus/.cache/kagglehub/datasets/bishals098/nasa-turbofan-engine-degradation-simulation/versions/1'
     train_df, test_df, label_df = load_data(base_path)
 
     # Drop columns based on EDA findings to reduce noise and improve model performance
@@ -133,6 +144,7 @@ def main():
     model = LSTMModel(NUM_FEATURES, HIDDEN_SIZE, NUM_LAYERS, 1).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=8)
     
     # Log hyperparameters to MLflow and train
     with mlflow.start_run():
@@ -170,12 +182,15 @@ def main():
                     loss = criterion(output, batch_y)
                     total_val_loss += loss.item()
             
+            avg_val_loss = total_val_loss / len(val_loader)
+            scheduler.step(avg_val_loss)
+            
             if (epoch + 1) % 10 == 0:
                 avg_train_loss = total_train_loss / len(train_loader)
-                avg_val_loss = total_val_loss / len(val_loader)
-                print(f"Epoch [{epoch+1}/{EPOCHS}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+                print(f"Epoch [{epoch+1}/{EPOCHS}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
                 mlflow.log_metric("train_loss", avg_train_loss)
                 mlflow.log_metric("val_loss", avg_val_loss)
+                mlflow.log_metric("learning_rate", optimizer.param_groups[0]['lr'])
             
             model.train()
     
