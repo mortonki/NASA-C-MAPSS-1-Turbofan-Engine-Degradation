@@ -39,6 +39,8 @@ Check the number of lines before reading tabular data files (e.g. *.csv). If the
 
 Do not attempt to use replace_in_file in PLAN MODE. Ask to switch to ACT MODE.
 
+Be careful not to loop over the same thought patters over and over again. 
+
 When replace_in_file tool fails, and then you are given a file_content block, try using replace_in_file tool again against that content, instead of content returned in replace_in_file.
 
 When working with Jupyter notebook file, do not try to write the complete file content on failure. Instead, when given a file_content block, try using replace_in_file tool again with that content in mind.

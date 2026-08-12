@@ -76,11 +76,15 @@ def normalize_data(train_df, test_df, val_df=None):
         val_df[sensor_cols] = scaler.transform(val_df[sensor_cols])
 
     # Apply Outlier Capping (Winsorizing) based on training data distribution to mitigate MinMax shifts
-    apply_outlier_capping(train_df, sensor_cols, lower=0.01, upper=0.99)
-    apply_outlier_capping(test_df, sensor_cols, lower=0.01, upper=0.99)
-    
-    if val_df is not None:
-        apply_outlier_capping(val_df, sensor_cols, lower=0.01, upper=0.99)
+    lower_bounds = train_df[sensor_cols].quantile(0.01)
+    upper_bounds = train_df[sensor_cols].quantile(0.99)
+
+    for df in [train_df, val_df, test_df]:
+        df[sensor_cols] = df[sensor_cols].clip(
+            lower=lower_bounds,
+            upper=upper_bounds,
+            axis="columns"
+        )
     
     if val_df is not None:
         return train_df, test_df, val_df
@@ -101,8 +105,8 @@ def create_sliding_windows(df, feature_cols, window_size=30):
         if len(group) >= window_size:
             # For each row from window_size to the end
             for i in range(window_size, len(group)):
-                # The window is the previous 'window_size' rows
-                window = group.iloc[i-window_size:i][feature_cols].values
+                # The window is the 'window_size' rows ending at i (indices i-window_size+1 to i)
+                window = group.iloc[i-window_size+1:i+1][feature_cols].values
                 # The target is the RUL at the current row (index i)
                 if 'RUL' in group.columns:
                     target = group.iloc[i]['RUL']

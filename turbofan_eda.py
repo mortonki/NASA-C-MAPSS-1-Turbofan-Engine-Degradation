@@ -269,7 +269,6 @@ def _(feature_cols, train_df_rul):
     correlations = train_df_rul[feature_cols + ['RUL']].corr()['RUL'].drop("RUL").sort_values(ascending=False)
     corr_df = correlations.reset_index()
     corr_df.columns = ["sensor", "correlation_with_RUL"]
-
     return (corr_df,)
 
 

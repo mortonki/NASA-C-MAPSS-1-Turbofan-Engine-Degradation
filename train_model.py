@@ -1,3 +1,5 @@
+import copy
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,9 +18,12 @@ WINDOW_SIZE = 30
 NUM_FEATURES = 14
 HIDDEN_SIZE = 64
 NUM_LAYERS = 2
-BATCH_SIZE = 64
+BATCH_SIZE = 256 # Windowing produces many highly correlated samples, so a larger batch size can help the model generalize better by avoiding fitting to small number of samples and then failing to generalize to the rest of the data. This is especially important in time series data where consecutive samples are often very similar.
 LEARNING_RATE = 1e-3
+EARLY_STOPPING_PATIENCE = 20
+EARLY_STOPPING_DELTA = 0.0001
 EPOCHS = 10
+SEED = 42
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTMModel(nn.Module):
@@ -31,8 +36,8 @@ class LSTMModel(nn.Module):
 
     def forward(self, x):
         # x shape: (batch_size, window_size, num_features)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(DEVICE)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(DEVICE)
+        h0 = x.new_zeros(self.num_layers, x.size(0), self.hidden_size)
+        c0 = x.new_zeros(self.num_layers, x.size(0), self.hidden_size)
         
         out, _ = self.lstm(x, (h0, c0))
         # out shape: (batch_size, window_size, hidden_size)
@@ -56,11 +61,12 @@ def build_parser():
                         help="Learning rate for the optimizer")
     parser.add_argument("--epochs", type=int, default=EPOCHS,
                         help="Number of epochs to train")
-    parser.add_argument("--seed", type=int, default=42,
+    parser.add_argument("--seed", type=int, default=SEED,
                         help="Random seed for reproducibility")
-
-
-    # Optional: let user override device
+    parser.add_argument("--early-stopping-patience", type=int, default=EARLY_STOPPING_PATIENCE,
+                        help="Number of epochs with no improvement in validation loss before stopping")
+    parser.add_argument("--early-stopping-delta", type=float, default=EARLY_STOPPING_DELTA,
+                        help="Minimum change in validation loss to qualify as an improvement")
     parser.add_argument(
         "--device",
         choices=["cpu", "cuda"],
@@ -83,6 +89,8 @@ def main():
     LEARNING_RATE = args.learning_rate
     EPOCHS = args.epochs
     DEVICE = args.device
+    EARLY_STOPPING_PATIENCE = args.early_stopping_patience
+    EARLY_STOPPING_DELTA = args.early_stopping_delta
 
     # Set random seeds for reproducibility
     if args.seed is not None:
@@ -144,7 +152,7 @@ def main():
     model = LSTMModel(NUM_FEATURES, HIDDEN_SIZE, NUM_LAYERS, 1).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=8)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, min_lr=1e-6, patience=10)
     
     # Log hyperparameters to MLflow and train
     with mlflow.start_run():
@@ -159,10 +167,13 @@ def main():
         mlflow.log_metric("train_samples", len(train_windows))
         mlflow.log_metric("test_samples", len(test_windows))
         
-        model.train()
         start_time = time.time()
+        best_val_loss = float("inf")
+        epochs_without_improvement = 0
+        best_epoch = 0
     
         for epoch in range(EPOCHS):
+            model.train()
             total_train_loss = 0
             for batch_x, batch_y in train_loader:
                 batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
@@ -171,7 +182,7 @@ def main():
                 loss = criterion(output, batch_y)
                 loss.backward()
                 optimizer.step()
-                total_train_loss += loss.item()
+                total_train_loss += loss.item() * batch_x.size(0)
             
             model.eval()
             total_val_loss = 0
@@ -180,19 +191,33 @@ def main():
                     batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
                     output = model(batch_x)
                     loss = criterion(output, batch_y)
-                    total_val_loss += loss.item()
+                    total_val_loss += loss.item() * batch_x.size(0)
             
-            avg_val_loss = total_val_loss / len(val_loader)
+            avg_val_loss = total_val_loss / len(val_loader.dataset)
             scheduler.step(avg_val_loss)
-            
+
+            if avg_val_loss < best_val_loss - EARLY_STOPPING_DELTA:
+                best_val_loss = avg_val_loss
+                epochs_without_improvement = 0
+                best_epoch = epoch + 1
+                torch.save(model.state_dict(), 'best_lstm_model.pth')
+            else:
+                epochs_without_improvement += 1
+
+            if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
+                print(f"Early stopping triggered at epoch {epoch + 1}")
+                break
+
             if (epoch + 1) % 10 == 0:
-                avg_train_loss = total_train_loss / len(train_loader)
+                avg_train_loss = total_train_loss / len(train_loader.dataset)
                 print(f"Epoch [{epoch+1}/{EPOCHS}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
                 mlflow.log_metric("train_loss", avg_train_loss)
                 mlflow.log_metric("val_loss", avg_val_loss)
                 mlflow.log_metric("learning_rate", optimizer.param_groups[0]['lr'])
-            
-            model.train()
+
+        mlflow.log_metric("best_val_loss", best_val_loss)
+        mlflow.log_metric("best_epoch", best_epoch)
+        model.train()
     
         end_time = time.time()
         training_time = end_time - start_time
