@@ -47,7 +47,7 @@ def load_data(base_path):
     
     return train_df, test_df, label_df
 
-def calculate_train_rul(train_df):
+def calculate_train_rul(train_df, cap=None):
     # Group by unit_id and find the max cycle for each unit, renaming to _max_cycle immediately
     max_cycles = train_df.groupby('unit_id')['cycle'].max().reset_index()
     max_cycles.columns = ['unit_id', '_max_cycle']
@@ -56,7 +56,7 @@ def calculate_train_rul(train_df):
     train_df = train_df.merge(max_cycles, on='unit_id')
     
     # Calculate RUL (Running down from total life) from max_cycle minus the current cycle, using the temporary _max_cycle column
-    train_df['RUL'] = train_df['_max_cycle'] - train_df['cycle']
+    train_df['RUL'] = (train_df['_max_cycle'] - train_df['cycle']).clip(upper=cap) # Clip RUL to a maximum of cap cycles
 
     # Drop the temporary column as it's no longer needed, utilizing the utility function for consistency
     train_df.drop(columns=['_max_cycle'], inplace=True)

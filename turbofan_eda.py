@@ -142,14 +142,14 @@ def _(test_df, train_df):
 @app.cell
 def _(calculate_train_rul, train_df):
     # Calculate RUL for training set before EDA checks
-    train_df_rul = calculate_train_rul(train_df=train_df.copy())
+    train_df_rul = calculate_train_rul(train_df=train_df.copy(), cap=None)  # Cap RUL at None for EDA purposes
     return (train_df_rul,)
 
 
 @app.cell
 def _(train_df_rul):
     # Sanity check: final row for each engine should have RUL = 0
-    train_df_rul.groupby("unit_id")["RUL"].min().value_counts()
+    train_df_rul.groupby("unit_id")["RUL"].max().value_counts()
     return
 
 

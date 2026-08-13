@@ -20,9 +20,9 @@ HIDDEN_SIZE = 64
 NUM_LAYERS = 2
 BATCH_SIZE = 256 # Windowing produces many highly correlated samples, so a larger batch size can help the model generalize better by avoiding fitting to small number of samples and then failing to generalize to the rest of the data. This is especially important in time series data where consecutive samples are often very similar.
 LEARNING_RATE = 1e-3
-EARLY_STOPPING_PATIENCE = 20
+EARLY_STOPPING_PATIENCE = 80
 EARLY_STOPPING_DELTA = 0.0001
-EPOCHS = 10
+EPOCHS = 100
 SEED = 42
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -194,6 +194,7 @@ def main():
                     total_val_loss += loss.item() * batch_x.size(0)
             
             avg_val_loss = total_val_loss / len(val_loader.dataset)
+            avg_val_rmse = np.sqrt(avg_val_loss)
             scheduler.step(avg_val_loss)
 
             if avg_val_loss < best_val_loss - EARLY_STOPPING_DELTA:
@@ -210,12 +211,14 @@ def main():
 
             if (epoch + 1) % 10 == 0:
                 avg_train_loss = total_train_loss / len(train_loader.dataset)
-                print(f"Epoch [{epoch+1}/{EPOCHS}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
+                print(f"Epoch [{epoch+1}/{EPOCHS}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Val RMSE: {avg_val_rmse:.4f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
                 mlflow.log_metric("train_loss", avg_train_loss)
                 mlflow.log_metric("val_loss", avg_val_loss)
+                mlflow.log_metric("val_rmse", avg_val_rmse)
                 mlflow.log_metric("learning_rate", optimizer.param_groups[0]['lr'])
 
         mlflow.log_metric("best_val_loss", best_val_loss)
+        mlflow.log_metric("best_val_rmse", np.sqrt(best_val_loss))
         mlflow.log_metric("best_epoch", best_epoch)
         model.train()
     
