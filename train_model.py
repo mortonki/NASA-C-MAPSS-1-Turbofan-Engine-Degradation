@@ -20,11 +20,15 @@ HIDDEN_SIZE = 256
 NUM_LAYERS = 1
 BATCH_SIZE = 256 # Windowing produces many highly correlated samples, so a larger batch size can help the model generalize better by avoiding fitting to small number of samples and then failing to generalize to the rest of the data. This is especially important in time series data where consecutive samples are often very similar.
 LEARNING_RATE = 1e-3
-EARLY_STOPPING_PATIENCE = 50
+EARLY_STOPPING_PATIENCE = 40
 EARLY_STOPPING_DELTA = 0.0001
 EPOCHS = 500
 SEED = 42
 CAP = None  # Cap for RUL values to avoid extreme values affecting the model
+WEIGHT_DECAY = 1e-4  # Weight decay for the optimizer
+SCHEDULER_FACTOR = 0.5  # Factor by which the learning rate is reduced
+SCHEDULER_MIN_LR = 1e-6  # Minimum learning rate for the scheduler
+SCHEDULER_PATIENCE = 10  # Patience for the scheduler
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTMModel(nn.Module):
@@ -70,13 +74,13 @@ def build_parser():
                         help="Minimum change in validation loss to qualify as an improvement")
     parser.add_argument("--cap", type=int, default=CAP,
                         help="Cap for RUL values to avoid extreme values affecting the model")
-    parser.add_argument("--weight-decay", type=float, default=1e-4,
+    parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY,
                         help="Weight decay for the optimizer")
-    parser.add_argument("--scheduler-factor", type=float, default=0.5,
+    parser.add_argument("--scheduler-factor", type=float, default=SCHEDULER_FACTOR,
                         help="Factor by which the learning rate is reduced")
-    parser.add_argument("--scheduler-min-lr", type=float, default=1e-6,
+    parser.add_argument("--scheduler-min-lr", type=float, default=SCHEDULER_MIN_LR,
                         help="Minimum learning rate for the scheduler")
-    parser.add_argument("--scheduler-patience", type=int, default=10,
+    parser.add_argument("--scheduler-patience", type=int, default=SCHEDULER_PATIENCE,
                         help="Patience for the scheduler")
     parser.add_argument(
         "--device",
@@ -140,14 +144,15 @@ def main():
     train_df, val_df = split_train_val(train_df)
     train_df, test_df, val_df = normalize_data(train_df, test_df, val_df)
         
-    # Align test RULs
+    # Align test RULs. In the official test set, the engines don't run to failure. We need to calculate the RUL for the test set based on the provided labels and the maximum cycle for each unit.
     unique_units = test_df['unit_id'].unique()
     rul_mapping = dict(zip(unique_units, label_df['RUL'].values))
     test_df['RUL'] = test_df['unit_id'].map(rul_mapping)
     max_cycles_test = test_df.groupby('unit_id')['cycle'].max().reset_index()
     max_cycles_test.columns = ['unit_id', 'max_cycle_test']
     test_df = test_df.merge(max_cycles_test, on='unit_id')
-    test_df['RUL'] = test_df.apply(lambda row: rul_mapping[row['unit_id']] + (row['max_cycle_test'] - row['cycle']), axis=1)
+    test_df['RUL'] = test_df.apply(lambda row: rul_mapping[row['unit_id']] + (row['max_cycle_test'] - row['cycle']), axis=1) # The difference between the maximum cycle for that unit and the current cycle is added to the RUL from the label file to get the correct RUL for each row in the test set.
+    test_df['RUL'] = test_df['RUL'].clip(upper=CAP)
     
     print(f"Creating sliding windows...")
     train_windows, train_targets = create_sliding_windows(train_df, feature_cols, WINDOW_SIZE)

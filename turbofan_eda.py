@@ -121,6 +121,35 @@ def _(test_df):
 
 
 @app.cell
+def _(test_df):
+    #In the official test set, the engines don't run to failure. These are the last observed cycles.
+    test_df.groupby('unit_id')['cycle'].max().reset_index()
+    return
+
+
+@app.cell
+def _(label_df):
+    # The `label_df` often provides the RUL at the *start* of the test for each engine unit.
+    label_df.reset_index()
+    return
+
+
+@app.cell
+def _(label_df, test_df):
+    # Add up the cycles and the RULs for each unit in the test set and create a mapping of unit_id to RUL
+    unique_units = test_df['unit_id'].unique()
+    rul_mapping = dict(zip(unique_units, label_df['RUL'].values)) # pairs the first unit ID with the first RUL value, which assumes that the order of unit IDs in the test set matches the order of RULs in the label file. 
+    rul_mapping
+    return
+
+
+@app.cell
+def _():
+    #We need to calculate the RUL for the test set based on the provided labels and the maximum cycle for each unit.
+    return
+
+
+@app.cell
 def _(train_df):
     train_df.info()
     return
