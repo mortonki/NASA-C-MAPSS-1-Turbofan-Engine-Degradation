@@ -3,12 +3,12 @@ import numpy as np
 import os
 from sklearn.preprocessing import StandardScaler
 
-def drop_columns(df, cols_to_drop):
-    """Drop specified columns from dataframe."""
-    for col in cols_to_drop:  # Check column exists first to avoid errors
-        if col in df.columns: 
-            df.drop(columns=[col], inplace=True)
-    return df
+#def drop_columns(df, cols_to_drop):
+#    """Drop specified columns from dataframe."""
+#    for col in cols_to_drop:  # Check column exists first to avoid errors
+#        if col in df.columns: 
+#            df.drop(columns=[col], inplace=True)
+#    return df
 
 def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
     # Capping values based on percentiles derived from the training distribution (or provided bounds)
@@ -47,21 +47,44 @@ def load_data(base_path):
     
     return train_df, test_df, label_df
 
-def calculate_train_rul(train_df, cap=None):
-    # Group by unit_id and find the max cycle for each unit, renaming to _max_cycle immediately
-    max_cycles = train_df.groupby('unit_id')['cycle'].max().reset_index()
-    max_cycles.columns = ['unit_id', '_max_cycle']
+def calculate_rul(df, label_df=None, cap=None):
+    """
+    Calculate RUL for both training and test sets.
     
-    # Merge back to the original dataframe using the renamed column
-    train_df = train_df.merge(max_cycles, on='unit_id')
+    If label_df is provided (test set), it uses the RUL values from label_df 
+    and adjusts them based on the current cycle and the maximum cycle in the dataframe.
+    If label_df is not provided (training set), it calculates RUL as 
+    (max_cycle - current_cycle).
+    """
+    # Group by unit_id and find the max cycle for each unit
+    max_cycles = df.groupby("unit_id")["cycle"].max().reset_index()
+    max_cycles.columns = ["unit_id", "_max_cycle"]
     
-    # Calculate RUL (Running down from total life) from max_cycle minus the current cycle, using the temporary _max_cycle column
-    train_df['RUL'] = (train_df['_max_cycle'] - train_df['cycle']).clip(upper=cap) # Clip RUL to a maximum of cap cycles
+    # Merge back to the original dataframe
+    df = df.merge(max_cycles, on="unit_id")
+    
+    if label_df is not None:
+        # Test set logic
+        if "unit_id" in label_df.columns:
+            rul_mapping = dict(zip(label_df["unit_id"], label_df["RUL"]))
+        else:
+            unique_units = df["unit_id"].unique()
+            rul_mapping = dict(zip(unique_units, label_df["RUL"].values))
+            
+        df["RUL"] = df["unit_id"].map(rul_mapping) + (df["_max_cycle"] - df["cycle"])
+    else:
+        # Training set logic
+        df["RUL"] = (df["_max_cycle"] - df["cycle"])
+        
+    df["RUL"] = df["RUL"].clip(upper=cap)
+    
+    # Drop the temporary column
+    df.drop(columns=["_max_cycle"], inplace=True)
+    
+    return df
 
-    # Drop the temporary column as it's no longer needed, utilizing the utility function for consistency
-    train_df.drop(columns=['_max_cycle'], inplace=True)
-    
-    return train_df
+def calculate_train_rul(train_df, cap=None):
+    return calculate_rul(train_df, label_df=None, cap=cap)
 
 def normalize_data(train_df, test_df, val_df=None):
     # We only want to normalize the sensor columns

@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import pandas as pd
-from data_prep import load_data, calculate_train_rul, normalize_data, create_sliding_windows, split_train_val
+from data_prep import load_data, calculate_rul, calculate_train_rul, normalize_data, create_sliding_windows, split_train_val
 import time
 import mlflow
 import argparse
@@ -144,15 +144,8 @@ def main():
     train_df, val_df = split_train_val(train_df)
     train_df, test_df, val_df = normalize_data(train_df, test_df, val_df)
         
-    # Align test RULs. In the official test set, the engines don't run to failure. We need to calculate the RUL for the test set based on the provided labels and the maximum cycle for each unit.
-    unique_units = test_df['unit_id'].unique()
-    rul_mapping = dict(zip(unique_units, label_df['RUL'].values))
-    test_df['RUL'] = test_df['unit_id'].map(rul_mapping)
-    max_cycles_test = test_df.groupby('unit_id')['cycle'].max().reset_index()
-    max_cycles_test.columns = ['unit_id', 'max_cycle_test']
-    test_df = test_df.merge(max_cycles_test, on='unit_id')
-    test_df['RUL'] = test_df.apply(lambda row: rul_mapping[row['unit_id']] + (row['max_cycle_test'] - row['cycle']), axis=1) # The difference between the maximum cycle for that unit and the current cycle is added to the RUL from the label file to get the correct RUL for each row in the test set.
-    test_df['RUL'] = test_df['RUL'].clip(upper=CAP)
+    # Align test RULs.
+    test_df = calculate_rul(test_df, label_df=label_df, cap=CAP)
     
     print(f"Creating sliding windows...")
     train_windows, train_targets = create_sliding_windows(train_df, feature_cols, WINDOW_SIZE)
