@@ -14,16 +14,17 @@ import mlflow
 import argparse
 
 # Default hyperparameters
-WINDOW_SIZE = 30
+WINDOW_SIZE = 80
 NUM_FEATURES = 14
-HIDDEN_SIZE = 64
-NUM_LAYERS = 2
+HIDDEN_SIZE = 256
+NUM_LAYERS = 1
 BATCH_SIZE = 256 # Windowing produces many highly correlated samples, so a larger batch size can help the model generalize better by avoiding fitting to small number of samples and then failing to generalize to the rest of the data. This is especially important in time series data where consecutive samples are often very similar.
 LEARNING_RATE = 1e-3
-EARLY_STOPPING_PATIENCE = 80
+EARLY_STOPPING_PATIENCE = 50
 EARLY_STOPPING_DELTA = 0.0001
-EPOCHS = 100
+EPOCHS = 500
 SEED = 42
+CAP = None  # Cap for RUL values to avoid extreme values affecting the model
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTMModel(nn.Module):
@@ -67,6 +68,16 @@ def build_parser():
                         help="Number of epochs with no improvement in validation loss before stopping")
     parser.add_argument("--early-stopping-delta", type=float, default=EARLY_STOPPING_DELTA,
                         help="Minimum change in validation loss to qualify as an improvement")
+    parser.add_argument("--cap", type=int, default=CAP,
+                        help="Cap for RUL values to avoid extreme values affecting the model")
+    parser.add_argument("--weight-decay", type=float, default=1e-4,
+                        help="Weight decay for the optimizer")
+    parser.add_argument("--scheduler-factor", type=float, default=0.5,
+                        help="Factor by which the learning rate is reduced")
+    parser.add_argument("--scheduler-min-lr", type=float, default=1e-6,
+                        help="Minimum learning rate for the scheduler")
+    parser.add_argument("--scheduler-patience", type=int, default=10,
+                        help="Patience for the scheduler")
     parser.add_argument(
         "--device",
         choices=["cpu", "cuda"],
@@ -88,16 +99,22 @@ def main():
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
     EPOCHS = args.epochs
+    SEED = args.seed
     DEVICE = args.device
     EARLY_STOPPING_PATIENCE = args.early_stopping_patience
     EARLY_STOPPING_DELTA = args.early_stopping_delta
+    CAP = args.cap
+    WEIGHT_DECAY = args.weight_decay
+    SCHEDULER_FACTOR = args.scheduler_factor
+    SCHEDULER_MIN_LR = args.scheduler_min_lr
+    SCHEDULER_PATIENCE = args.scheduler_patience
 
     # Set random seeds for reproducibility
-    if args.seed is not None:
-        torch.manual_seed(args.seed)
-        np.random.seed(args.seed)
+    if SEED is not None:
+        torch.manual_seed(SEED)
+        np.random.seed(SEED)
         if DEVICE == "cuda":
-            torch.cuda.manual_seed_all(args.seed)
+            torch.cuda.manual_seed_all(SEED)
 
     # Initialize MLflow tracking
     mlflow.set_tracking_uri("sqlite:///mlruns.db")
@@ -119,7 +136,7 @@ def main():
     feature_cols = sensor_cols + op_cond_cols
 
     # Preprocess data
-    train_df = calculate_train_rul(train_df)
+    train_df = calculate_train_rul(train_df=train_df, cap=CAP)  # Cap RUL at specified value to avoid extreme values affecting the model
     train_df, val_df = split_train_val(train_df)
     train_df, test_df, val_df = normalize_data(train_df, test_df, val_df)
         
@@ -151,8 +168,8 @@ def main():
     print(f"Training LSTM model on {DEVICE}...")
     model = LSTMModel(NUM_FEATURES, HIDDEN_SIZE, NUM_LAYERS, 1).to(DEVICE)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, min_lr=1e-6, patience=10)
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=SCHEDULER_FACTOR, min_lr=SCHEDULER_MIN_LR, patience=SCHEDULER_PATIENCE)
     
     # Log hyperparameters to MLflow and train
     with mlflow.start_run():
@@ -162,6 +179,13 @@ def main():
         mlflow.log_param("num_layers", NUM_LAYERS)
         mlflow.log_param("batch_size", BATCH_SIZE)
         mlflow.log_param("learning_rate", LEARNING_RATE)
+        mlflow.log_param("weight_decay", WEIGHT_DECAY)
+        mlflow.log_param("early_stopping_patience", EARLY_STOPPING_PATIENCE)
+        mlflow.log_param("early_stopping_delta", EARLY_STOPPING_DELTA)
+        mlflow.log_param("cap", CAP)
+        mlflow.log_param("scheduler_factor", SCHEDULER_FACTOR)
+        mlflow.log_param("scheduler_min_lr", SCHEDULER_MIN_LR)
+        mlflow.log_param("scheduler_patience", SCHEDULER_PATIENCE)
         mlflow.log_param("epochs", EPOCHS)
         mlflow.log_param("device", DEVICE)
         mlflow.log_metric("train_samples", len(train_windows))
@@ -225,10 +249,6 @@ def main():
         end_time = time.time()
         training_time = end_time - start_time
         mlflow.log_metric("training_time_seconds", training_time)
-
-        # Save the model
-        #torch.save(model.state_dict(), 'lstm_model.pth')
-        #print("Model saved to lstm_model.pth")
 
         print(f"Training completed in {training_time:.2f} seconds.")
         
