@@ -266,19 +266,78 @@ def _(mo):
 @app.cell
 def _(feature_cols, train_df_rul):
     # Sensor correlation analysis: Identify and visualize the correlation of each sensor with RUL to determine their predictive power.
-    correlations = train_df_rul[feature_cols + ['RUL']].corr()['RUL'].drop("RUL").sort_values(ascending=False)
-    corr_df = correlations.reset_index()
-    corr_df.columns = ["sensor", "correlation_with_RUL"]
-    return (corr_df,)
+    correlations_rul = train_df_rul[feature_cols + ['RUL']].corr()['RUL'].drop("RUL").sort_values(ascending=False)
+    corr_rul_df = correlations_rul.reset_index()
+    corr_rul_df.columns = ["sensor", "correlation_with_RUL"]
+    return (corr_rul_df,)
 
 
 @app.cell
-def _(corr_df, plt):
+def _(corr_rul_df, plt):
     plt.figure(figsize=(10,6))
-    plt.barh(corr_df["sensor"], corr_df["correlation_with_RUL"])
+    plt.barh(corr_rul_df["sensor"], corr_rul_df["correlation_with_RUL"])
     plt.axvline(0, color="black")
     plt.xlabel("Correlation with RUL")
     plt.title("Sensor Correlations with Remaining Useful Life")
+    plt.gca().invert_yaxis()
+    plt.show()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    A simple correlation with RUL isn't sufficient because degradation can be nonlinear, but it is useful exploratory information.
+    """)
+    return
+
+
+@app.cell
+def _(feature_cols, plt, train_df_rul):
+    # Sensor correlation analysis: Identify and visualize the correlation of each sensor with operation conditions to determine their predictive power.
+    correlations_op_cond = train_df_rul[feature_cols + ['op_cond_1']].corr()['op_cond_1'].drop("op_cond_1").sort_values(ascending=False)
+    corr_op_cond_df = correlations_op_cond.reset_index()
+    corr_op_cond_df.columns = ["sensor", "correlation_with_op_cond_1"] 
+
+    plt.figure(figsize=(10,6))
+    plt.barh(corr_op_cond_df["sensor"], corr_op_cond_df["correlation_with_op_cond_1"])
+    plt.axvline(0, color="black")
+    plt.xlabel("Correlation with op_cond_1")
+    plt.title("Sensor Correlations with Operation Condition 1")
+    plt.gca().invert_yaxis()
+    plt.show()
+    return
+
+
+@app.cell
+def _(feature_cols, plt, train_df_rul):
+    # Sensor correlation analysis: Identify and visualize the correlation of each sensor with operation conditions to determine their predictive power.
+    correlations_op_cond_2 = train_df_rul[feature_cols + ['op_cond_2']].corr()['op_cond_2'].drop("op_cond_2").sort_values(ascending=False)
+    corr_op_cond_2_df = correlations_op_cond_2.reset_index()
+    corr_op_cond_2_df.columns = ["sensor", "correlation_with_op_cond_2"] 
+
+    plt.figure(figsize=(10,6))
+    plt.barh(corr_op_cond_2_df["sensor"], corr_op_cond_2_df["correlation_with_op_cond_2"])
+    plt.axvline(0, color="black")
+    plt.xlabel("Correlation with op_cond_2")
+    plt.title("Sensor Correlations with Operation Condition 2")
+    plt.gca().invert_yaxis()
+    plt.show()
+    return
+
+
+@app.cell
+def _(feature_cols, plt, train_df_rul):
+    # Sensor correlation analysis: Identify and visualize the correlation of each sensor with operation conditions to determine their predictive power.
+    correlations_op_cond_3 = train_df_rul[feature_cols + ['op_cond_3']].corr()['op_cond_3'].drop("op_cond_3").sort_values(ascending=False)
+    corr_op_cond_3_df = correlations_op_cond_3.reset_index()
+    corr_op_cond_3_df.columns = ["sensor", "correlation_with_op_cond_3"] 
+
+    plt.figure(figsize=(10,6))
+    plt.barh(corr_op_cond_3_df["sensor"], corr_op_cond_3_df["correlation_with_op_cond_3"])
+    plt.axvline(0, color="black")
+    plt.xlabel("Correlation with op_cond_3")
+    plt.title("Sensor Correlations with Operation Condition 3  ")
     plt.gca().invert_yaxis()
     plt.show()
     return
