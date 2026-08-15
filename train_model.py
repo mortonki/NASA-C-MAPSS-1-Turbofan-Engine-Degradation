@@ -155,11 +155,11 @@ def main():
     # Convert to tensors
     X_train = torch.FloatTensor(train_windows)
     y_train = torch.FloatTensor(train_targets).view(-1, 1)
-    X_test = torch.FloatTensor(test_windows)
-    y_test = torch.FloatTensor(test_targets).view(-1, 1)
     X_val = torch.FloatTensor(val_windows)
     y_val = torch.FloatTensor(val_targets).view(-1, 1)
-    
+    X_test = torch.FloatTensor(test_windows)
+    y_test = torch.FloatTensor(test_targets).view(-1, 1)
+
     train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(TensorDataset(X_val, y_val), batch_size=BATCH_SIZE, shuffle=False)
     
