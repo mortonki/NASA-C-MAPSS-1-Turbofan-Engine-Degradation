@@ -127,7 +127,7 @@ def create_sliding_windows(df, feature_cols, window_size=30):
         # We need at least 'window_size' rows to create a window
         if len(group) >= window_size:
             # For each row from window_size to the end
-            for i in range(window_size, len(group)):
+            for i in range(window_size - 1, len(group)):
                 # The window is the 'window_size' rows ending at i (indices i-window_size+1 to i)
                 window = group.iloc[i-window_size+1:i+1][feature_cols].values
                 # The target is the RUL at the current row (index i)
@@ -140,6 +140,28 @@ def create_sliding_windows(df, feature_cols, window_size=30):
                 targets.append(target)
                 
     return np.array(windows), np.array(targets)
+
+def create_test_windows(df, feature_cols, window_size=30):
+    windows = []
+    targets = []
+    unit_ids = []
+
+    for unit_id, group in df.groupby('unit_id'):
+        group = group.sort_values('cycle')
+
+        if len(group) >= window_size:
+            window = group.iloc[-window_size:][feature_cols].values
+            target = group.iloc[-1]['RUL']
+
+            windows.append(window)
+            targets.append(target)
+            unit_ids.append(unit_id)
+
+    return (
+        np.array(windows),
+        np.array(targets),
+        np.array(unit_ids)
+    )
 
 def main():
     base_path = '/home/mordicus/.cache/kagglehub/datasets/bishals098/nasa-turbofan-engine-degradation-simulation/versions/1'

@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import pandas as pd
-from data_prep import load_data, calculate_rul, calculate_train_rul, normalize_data, create_sliding_windows, split_train_val
+from data_prep import load_data, calculate_rul, calculate_train_rul, normalize_data, create_sliding_windows, create_test_windows, split_train_val
 import time
 import mlflow
 import argparse
@@ -150,7 +150,7 @@ def main():
     print(f"Creating sliding windows...")
     train_windows, train_targets = create_sliding_windows(train_df, feature_cols, WINDOW_SIZE)
     val_windows, val_targets = create_sliding_windows(val_df, feature_cols, WINDOW_SIZE)
-    test_windows, test_targets = create_sliding_windows(test_df, feature_cols, WINDOW_SIZE)
+    test_windows, test_targets, unit_ids = create_test_windows(test_df, feature_cols, WINDOW_SIZE)
     
     # Convert to tensors
     X_train = torch.FloatTensor(train_windows)
