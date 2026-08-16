@@ -20,7 +20,6 @@ def _():
     from data_prep import load_data, calculate_train_rul, normalize_data, apply_outlier_capping, create_sliding_windows
 
     return (
-        KMeans,
         Path,
         calculate_train_rul,
         kagglehub,
@@ -196,6 +195,14 @@ def _(train_df_rul):
     return (feature_cols,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## In-between sensors correlation
+    """)
+    return
+
+
 @app.cell
 def _(feature_cols, mo, plt, sns, train_df_rul):
     # Key Feature Distribution Analysis: Plot histograms and KDEs for all representative features to examine their individual distributions (skewness, modality).
@@ -270,6 +277,14 @@ def _(feature_cols, test_df, train_df_rul):
     train_df_rul.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
     test_df.copy().drop(columns=sensors_to_drop, inplace=True) # Use copy() to avoid SettingWithCopyWarning in notebook context
     return (feature_cols_dropped,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Sensor correlation with RUL and operational conditions
+    """)
+    return
 
 
 @app.cell
@@ -372,6 +387,56 @@ def _(feature_cols, plt, train_df_rul):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    C-MAPSS contains three operational-setting variables. Sensor measurements can change because of operating condition, rather than because the engine is degrading.
+
+    Conceptually:
+
+    x
+    sensor
+    	​
+    =f(operating condition)+g(degradation)+ϵ
+
+    Your LSTM currently has to learn both f and g.
+
+    You can make its job easier by removing some of the operating-condition dependence before feeding the data to it.
+
+    For example, investigate sensor values conditional on the operating settings rather than simply globally standardizing them.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Based on the documentation provided with the dataset, six different flight conditions were simulated that comprised of a range of values for three operational conditions: altitude (0-42K ft.), Mach number (0-0.84), and TRA (20-100).
+    """)
+    return
+
+
+@app.cell
+def _(train_df_rul):
+    # Select operational condition columns for further analysis
+    op_cond_cols = ['op_cond_1', 'op_cond_2', 'op_cond_3']
+    train_df_op = train_df_rul[op_cond_cols].copy()
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Justify sequence modeling
+    """)
+    return
+
+
 @app.cell
 def _(plt, sns, train_df_rul):
     # Sequence sanity check: how many cycles per engine?
@@ -447,6 +512,14 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Covariance or dataset shift
+    """)
+    return
+
+
 @app.cell
 def _(pd, test_df, train_df_rul):
     # Test for covariate shift between training and test datasets
@@ -471,31 +544,33 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Based on the documentation provided with the dataset, six different flight conditions were simulated that comprised of a range of values for three operational conditions: altitude (0-42K ft.), Mach number (0-0.84), and TRA (20-100).
+ 
     """)
     return
 
 
-@app.cell
-def _(train_df_rul):
-    # Select operational condition columns for further analysis
-    op_cond_cols = ['op_cond_1', 'op_cond_2', 'op_cond_3']
-    train_df_op = train_df_rul[op_cond_cols].copy()
-    return (train_df_op,)
-
-
-@app.cell
-def _(KMeans, train_df_op):
-    # Cluster operating conditions columns. 
-    kmeans = KMeans(n_clusters = 6,random_state = 42) # 6 clusters for the six different flight conditions in the dataset. This is based on domain knowledge  of the operational condition features.
-    train_df_op['op_clusters']  = kmeans.fit_predict(train_df_op)
-    #test_df['op_clusters'] = kmeans.predict(test_df[train_df_op])
-    train_df_op.head(1)
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Degradation manifestation
+    """)
     return
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Consider degradation-oriented features
+
+    For each sensor, investigate whether degradation manifests as:
+
+    monotonic drift
+    increasing variance
+    increasing/decreasing slope
+    departure from an engine's initial operating regime
+
+    A particularly useful idea is relative-to-baseline features.
+    """)
     return
 
 

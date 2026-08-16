@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 #    return df
 
 def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
-    # Capping values based on percentiles derived from the training distribution (or provided bounds)
+    # Capping values based on percentiles derived from the training distribution (or provided bounds) (Winsorizing)
     for col in cols:
         lower_bound = df[col].quantile(lower)
         upper_bound = df[col].quantile(upper)
@@ -86,9 +86,9 @@ def calculate_rul(df, label_df=None, cap=None):
 def calculate_train_rul(train_df, cap=None):
     return calculate_rul(train_df, label_df=None, cap=cap)
 
-def normalize_data(train_df, test_df, val_df=None):
-    # We only want to normalize the sensor columns
-    sensor_cols = [col for col in train_df.columns if col.startswith('sensor_')]
+def normalize_data(train_df, test_df, val_df=None, sensor_cols=None):
+    if sensor_cols is None:
+        sensor_cols = train_df.columns.tolist()
     
     scaler = StandardScaler()
     # Fit on training data and transform both datasets (Standardization)
@@ -98,17 +98,6 @@ def normalize_data(train_df, test_df, val_df=None):
     if val_df is not None:
         val_df[sensor_cols] = scaler.transform(val_df[sensor_cols])
 
-    # Apply Outlier Capping (Winsorizing) based on training data distribution to mitigate MinMax shifts
-    lower_bounds = train_df[sensor_cols].quantile(0.01)
-    upper_bounds = train_df[sensor_cols].quantile(0.99)
-
-    for df in [train_df, val_df, test_df]:
-        df[sensor_cols] = df[sensor_cols].clip(
-            lower=lower_bounds,
-            upper=upper_bounds,
-            axis="columns"
-        )
-    
     if val_df is not None:
         return train_df, test_df, val_df
     return train_df, test_df
@@ -140,6 +129,29 @@ def create_sliding_windows(df, feature_cols, window_size=30):
                 targets.append(target)
                 
     return np.array(windows), np.array(targets)
+
+def create_feature_deltas(df, feature_cols):
+    """
+    Creates deltas of the specified feature columns.
+    The deltas are calculated within each unit_id group.
+    
+    Args:
+        df (pd.DataFrame): The input dataframe.
+        feature_cols (list): The list of columns to calculate deltas for.
+        
+    Returns:
+        pd.DataFrame: A dataframe containing the original columns and the new delta columns.
+    """
+    df_deltas = df.copy()
+    delta_cols = []
+    for col in feature_cols:
+        delta_col = f"{col}_delta"
+        df_deltas[delta_col] = df_deltas.groupby("unit_id")[col].diff()
+        delta_cols.append(delta_col)
+    
+    df_deltas = df_deltas.dropna(subset=delta_cols)
+    return df_deltas
+
 
 def create_test_windows(df, feature_cols, window_size=30):
     windows = []
