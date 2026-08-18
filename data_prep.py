@@ -3,13 +3,6 @@ import numpy as np
 import os
 from sklearn.preprocessing import StandardScaler
 
-#def drop_columns(df, cols_to_drop):
-#    """Drop specified columns from dataframe."""
-#    for col in cols_to_drop:  # Check column exists first to avoid errors
-#        if col in df.columns: 
-#            df.drop(columns=[col], inplace=True)
-#    return df
-
 def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
     # Capping values based on percentiles derived from the training distribution (or provided bounds) (Winsorizing)
     for col in cols:
@@ -17,7 +10,7 @@ def apply_outlier_capping(df, cols, lower=0.01, upper=0.99):
         upper_bound = df[col].quantile(upper)
         df[col] = np.where(df[col] < lower_bound, lower_bound, df[col])
         df[col] = np.where(df[col] > upper_bound, upper_bound, df[col])
-    return df # Moved return outside the loop to process all columns
+    return df
 
 def split_train_val(train_df, val_split=0.2):
     """
@@ -36,7 +29,6 @@ def split_train_val(train_df, val_split=0.2):
     val_df_split = train_df[train_df['unit_id'].isin(val_units)].copy()
     
     return train_df_split, val_df_split
-
 
 def load_data(base_path):
     cols = ['unit_id', 'cycle', 'op_cond_1', 'op_cond_2', 'op_cond_3'] + [f'sensor_{i}' for i in range(1, 22)]
@@ -130,29 +122,6 @@ def create_sliding_windows(df, feature_cols, window_size=30):
                 
     return np.array(windows), np.array(targets)
 
-def create_feature_deltas(df, feature_cols):
-    """
-    Creates deltas of the specified feature columns.
-    The deltas are calculated within each unit_id group.
-    
-    Args:
-        df (pd.DataFrame): The input dataframe.
-        feature_cols (list): The list of columns to calculate deltas for.
-        
-    Returns:
-        pd.DataFrame: A dataframe containing the original columns and the new delta columns.
-    """
-    df_deltas = df.copy()
-    delta_cols = []
-    for col in feature_cols:
-        delta_col = f"{col}_delta"
-        df_deltas[delta_col] = df_deltas.groupby("unit_id")[col].diff()
-        delta_cols.append(delta_col)
-    
-    df_deltas = df_deltas.dropna(subset=delta_cols)
-    return df_deltas
-
-
 def create_test_windows(df, feature_cols, window_size=30):
     windows = []
     targets = []
@@ -175,6 +144,164 @@ def create_test_windows(df, feature_cols, window_size=30):
         np.array(unit_ids)
     )
 
+def create_feature_deltas(df, feature_cols):
+    """
+    Creates deltas of the specified feature columns.
+    The deltas are calculated within each unit_id group.
+    
+    Args:
+        df (pd.DataFrame): The input dataframe.
+        feature_cols (list): The list of columns to calculate deltas for.
+        
+    Returns:
+        tuple: A tuple containing (df_deltas, updated_feature_cols)
+    """
+    df_deltas = df.copy()
+    delta_cols = []
+    for col in feature_cols:
+        delta_col = f"{col}_delta"
+        df_deltas[delta_col] = df_deltas.groupby("unit_id")[col].diff()
+        delta_cols.append(delta_col)
+    
+    df_deltas = df_deltas.dropna(subset=delta_cols)
+    return df_deltas, feature_cols + delta_cols
+
+def create_rolling_slope(df, feature_cols, window=10, min_periods=None):
+    """
+    Creates rolling slopes of the specified feature columns.
+    The slopes are calculated within each unit_id group using a linear regression
+    over a rolling window.
+    
+    Args:
+        df (pd.DataFrame): The input dataframe.
+        feature_cols (list): The list of columns to calculate rolling slopes for.
+        window (int): The size of the rolling window. Defaults to 10.
+        min_periods (int, optional): Minimum number of observations in window. Defaults to None.
+        
+    Returns:
+        tuple: A tuple containing (df_slopes, updated_feature_cols)
+    """
+    df_slopes = df.copy()
+    slope_cols = []
+    for col in feature_cols:
+        slope_col = f"{col}_slope"
+        
+        def calculate_slope(y):
+            if len(y) < window:
+                return np.nan
+            x = np.arange(len(y))
+            # Use polyfit to get the slope (degree 1)
+            # polyfit returns [slope, intercept]
+            return np.polyfit(x, y, 1)[0]
+
+        df_slopes[slope_col] = df_slopes.groupby("unit_id")[col].transform(
+            lambda x: x.rolling(window=window, min_periods=min_periods).apply(calculate_slope, raw=True)
+        )
+        slope_cols.append(slope_col)
+    
+    df_slopes = df_slopes.dropna(subset=slope_cols)
+    return df_slopes, feature_cols + slope_cols
+
+def create_rolling_mean(df, feature_cols, window=10, min_periods=None):
+    """
+    Creates rolling means of the specified feature columns.
+    The means are calculated within each unit_id group using a rolling window.
+    
+    Args:
+        df (pd.DataFrame): The input dataframe.
+        feature_cols (list): The list of columns to calculate rolling means for.
+        window (int): The size of the rolling window. Defaults to 10.
+        min_periods (int, optional): Minimum number of observations in window. Defaults to None.
+        
+    Returns:
+        tuple: A tuple containing (df_mean, updated_feature_cols)
+    """
+    df_mean = df.copy()
+    mean_cols = []
+    for col in feature_cols:
+        mean_col = f"{col}_mean"
+        df_mean[mean_col] = df_mean.groupby("unit_id")[col].transform(
+            lambda x: x.rolling(window=window, min_periods=min_periods).mean()
+        )
+        mean_cols.append(mean_col)
+    
+    df_mean = df_mean.dropna(subset=mean_cols)
+    return df_mean, feature_cols + mean_cols
+
+def create_rolling_std(df, feature_cols, window=10, min_periods=None):
+    """
+    Creates rolling standard deviations of the specified feature columns.
+    The standard deviations are calculated within each unit_id group using a rolling window.
+    
+    Args:
+        df (pd.DataFrame): The input dataframe.
+        feature_cols (list): The list of columns to calculate rolling standard deviations for.
+        window (int): The size of the rolling window. Defaults to 10.
+        min_periods (int, optional): Minimum number of observations in window. Defaults to None.
+        
+    Returns:
+        tuple: A tuple containing (df_std, updated_feature_cols)
+    """
+    df_std = df.copy()
+    std_cols = []
+    for col in feature_cols:
+        std_col = f"{col}_std"
+        df_std[std_col] = df_std.groupby("unit_id")[col].transform(
+            lambda x: x.rolling(window=window, min_periods=min_periods).std()
+        )
+        std_cols.append(std_col)
+    
+    df_std = df_std.dropna(subset=std_cols)
+    return df_std, feature_cols + std_cols
+
+def create_baseline_features(df, feature_cols, baseline_window=20):
+    """
+    Establishes a baseline for each unit_id based on the first \"baseline_window\" 
+    rows of each sequence and adds features representing the change with respect 
+    to that baseline.
+    
+    Args:
+        df (pd.DataFrame): The input dataframe.
+        feature_cols (list): The list of columns to establish baseline for.
+        baseline_window (int): The number of initial rows to use for the baseline.
+        
+    Returns:
+        tuple: A tuple containing (df_baseline, updated_feature_cols)
+    """
+    df_baseline = df.copy()
+    
+    # We need to calculate baselines for each unit_id.
+    # To do this correctly, we need to know which rows are the first baseline rows for each unit_id.
+    # We can do this by sorting a copy of the dataframe.
+    sorted_df = df_baseline.sort_values(['unit_id', 'cycle'])
+    
+    baselines = []
+    for unit_id, group in sorted_df.groupby("unit_id"):
+        baseline_data = group.iloc[:baseline_window]
+        baseline_values = baseline_data[feature_cols].mean().to_dict()
+        baseline_values['unit_id'] = unit_id
+        baselines.append(baseline_values)
+    
+    baseline_df = pd.DataFrame(baselines)
+    
+    # Merge the baseline values back into the original dataframe (df_baseline)
+    # This will preserve the original order of df_baseline.
+    df_baseline = df_baseline.merge(baseline_df, on='unit_id', how='left', suffixes=('', '_baseline'))
+    
+    # Create the delta columns
+    new_cols = []
+    for col in feature_cols:
+        delta_col = f"{col}_baseline_delta"
+        df_baseline[delta_col] = df_baseline[col] - df_baseline[f"{col}_baseline"]
+        new_cols.append(delta_col)
+        
+    # Drop the intermediate baseline columns
+    baseline_cols_to_drop = [f"{col}_baseline" for col in feature_cols]
+    df_baseline.drop(columns=baseline_cols_to_drop, inplace=True)
+    
+    return df_baseline, feature_cols + new_cols
+
+
 def main():
     base_path = '/home/mordicus/.cache/kagglehub/datasets/bishals098/nasa-turbofan-engine-degradation-simulation/versions/1'
     
@@ -195,6 +322,13 @@ def main():
     
     # Normalize sensor data and apply capping to mitigate MinMax shifts
     train_df, test_df = normalize_data(train_df, test_df)
+    
+    # Establish baseline features
+    train_df = create_baseline_features(train_df, feature_cols)
+    test_df = create_baseline_features(test_df, feature_cols)
+    
+    # Update feature_cols to include the new baseline delta features
+    feature_cols = feature_cols + [f"{col}_baseline_delta" for col in feature_cols]
     
     # 3. Align test RULs
     unique_units = test_df['unit_id'].unique()

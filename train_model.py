@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import pandas as pd
-from data_prep import load_data, calculate_rul, calculate_train_rul, normalize_data, create_sliding_windows, create_test_windows, create_feature_deltas, split_train_val
+from data_prep import load_data, calculate_rul, calculate_train_rul, normalize_data, create_sliding_windows, create_test_windows, create_feature_deltas, create_rolling_slope, create_rolling_mean, create_rolling_std, create_baseline_features, split_train_val
 import time
 import mlflow
 import argparse
@@ -130,29 +130,28 @@ def main():
     df, test_df, label_df = load_data(base_path)
 
     # Drop columns based on EDA findings to reduce noise and improve model performance
-    columns_to_drop = ['op_cond_1', 'op_cond_2', 'op_cond_3', 'sensor_1', 'sensor_5', 'sensor_6','sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
+    columns_to_drop = ['sensor_1', 'sensor_5', 'sensor_6','sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
     df.drop(columns=columns_to_drop, inplace=True)
     test_df.drop(columns=columns_to_drop, inplace=True)
 
     # Dynamically select remaining sensor columns present in the train dataframe
     feature_cols = [col for col in df.columns if col.startswith('sensor_')]
-    #op_cond_cols = [col for col in train_df.columns if col.startswith('op_cond_')]
+    op_cond_cols = [col for col in df.columns if col.startswith('op_cond_')]
  
     # Preprocess data
-    df = create_feature_deltas(df, feature_cols)    
-    feature_cols_with_delta = [col for col in df.columns if col.startswith('sensor_')]
+    df, feature_cols_with_baseline = create_baseline_features(df, feature_cols)    
     df = calculate_train_rul(train_df=df, cap=CAP)  # Cap RUL at specified value to avoid extreme values affecting the model
     train_df, val_df = split_train_val(df)
     # Process test data: create deltas and align RULs
-    test_df = create_feature_deltas(test_df, feature_cols)    
+    test_df, _ = create_baseline_features(test_df, feature_cols)    
     test_df = calculate_rul(test_df, label_df=label_df, cap=CAP)
     # Normalize all datasets (train, validation, test) using the training set statistics
-    train_df, test_df, val_df = normalize_data(train_df, test_df, val_df, sensor_cols=feature_cols_with_delta) # We only want to normalize the sensor columns
+    train_df, test_df, val_df = normalize_data(train_df, test_df, val_df, sensor_cols=feature_cols_with_baseline) # We only want to normalize the sensor columns
     
     print(f"Creating sliding windows...")
-    train_windows, train_targets = create_sliding_windows(train_df, feature_cols_with_delta, WINDOW_SIZE)
-    val_windows, val_targets = create_sliding_windows(val_df, feature_cols_with_delta, WINDOW_SIZE)
-    test_windows, test_targets, unit_ids = create_test_windows(test_df, feature_cols_with_delta, WINDOW_SIZE)
+    train_windows, train_targets = create_sliding_windows(train_df, feature_cols_with_baseline, WINDOW_SIZE)
+    val_windows, val_targets = create_sliding_windows(val_df, feature_cols_with_baseline, WINDOW_SIZE)
+    test_windows, test_targets, _ = create_test_windows(test_df, feature_cols_with_baseline, WINDOW_SIZE)
     
     # Convert to tensors
     X_train = torch.FloatTensor(train_windows)
