@@ -15,6 +15,7 @@ import argparse
 
 # Default hyperparameters
 WINDOW_SIZE = 80
+STRIDE = 1
 NUM_FEATURES = 31
 HIDDEN_SIZE = 64
 NUM_LAYERS = 1
@@ -57,6 +58,8 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Train an LSTM model for RUL prediction")
     parser.add_argument("--window-size", type=int, default=WINDOW_SIZE,
                         help="Size of the sliding window")
+    parser.add_argument("--stride", type=int, default=STRIDE,
+                        help="Stride for the sliding window")
     parser.add_argument("--num-features", type=int, default=NUM_FEATURES,
                         help="Number of input features per time step")
     parser.add_argument("--hidden-size", type=int, default=HIDDEN_SIZE,
@@ -102,6 +105,7 @@ def main():
 
     # Update hyperparameters from command line arguments
     WINDOW_SIZE = args.window_size
+    STRIDE = args.stride
     NUM_FEATURES = args.num_features
     HIDDEN_SIZE = args.hidden_size
     NUM_LAYERS = args.num_layers
@@ -155,8 +159,8 @@ def main():
     train_df, test_df, val_df = normalize_data(train_df, test_df, val_df, sensor_cols=feature_cols_with_baseline+op_cond_cols) # We only want to normalize the sensor columns
     
     print(f"Creating sliding windows...")
-    train_windows, train_targets = create_sliding_windows(train_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE, 5)  # Use a step size of 5 to reduce the number of highly correlated samples
-    val_windows, val_targets = create_sliding_windows(val_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE, 5)
+    train_windows, train_targets = create_sliding_windows(train_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE, STRIDE)  # Use a step size of STRIDE to reduce the number of highly correlated samples
+    val_windows, val_targets = create_sliding_windows(val_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE, STRIDE)
     test_windows, test_targets, _ = create_test_windows(test_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE)
     
     # Convert to tensors
