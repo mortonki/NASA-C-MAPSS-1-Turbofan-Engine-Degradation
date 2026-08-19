@@ -94,7 +94,7 @@ def normalize_data(train_df, test_df, val_df=None, sensor_cols=None):
         return train_df, test_df, val_df
     return train_df, test_df
 
-def create_sliding_windows(df, feature_cols, window_size=30):
+def create_sliding_windows(df, feature_cols, window_size=30, stride=1):
     # This function will return a list of windows
     # Each window is a numpy array of shape (window_size, num_features)
     
@@ -108,7 +108,7 @@ def create_sliding_windows(df, feature_cols, window_size=30):
         # We need at least 'window_size' rows to create a window
         if len(group) >= window_size:
             # For each row from window_size to the end
-            for i in range(window_size - 1, len(group)):
+            for i in range(window_size - 1, len(group), stride):
                 # The window is the 'window_size' rows ending at i (indices i-window_size+1 to i)
                 window = group.iloc[i-window_size+1:i+1][feature_cols].values
                 # The target is the RUL at the current row (index i)

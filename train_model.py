@@ -15,28 +15,30 @@ import argparse
 
 # Default hyperparameters
 WINDOW_SIZE = 80
-NUM_FEATURES = 28
-HIDDEN_SIZE = 256
+NUM_FEATURES = 31
+HIDDEN_SIZE = 64
 NUM_LAYERS = 1
 BATCH_SIZE = 256 # Windowing produces many highly correlated samples, so a larger batch size can help the model generalize better by avoiding fitting to small number of samples and then failing to generalize to the rest of the data. This is especially important in time series data where consecutive samples are often very similar.
 LEARNING_RATE = 1e-3
-EARLY_STOPPING_PATIENCE = 40
-EARLY_STOPPING_DELTA = 0.0001
+EARLY_STOPPING_PATIENCE = 30
+EARLY_STOPPING_DELTA = 0.0001 # Delta for early stopping to avoid stopping too early due to minor fluctuations in validation loss
 EPOCHS = 500
 SEED = 42
 CAP = None  # Cap for RUL values to avoid extreme values affecting the model
 WEIGHT_DECAY = 1e-4  # Weight decay for the optimizer
+DROPOUT = 0.2  # Dropout rate
 SCHEDULER_FACTOR = 0.5  # Factor by which the learning rate is reduced
 SCHEDULER_MIN_LR = 1e-6  # Minimum learning rate for the scheduler
 SCHEDULER_PATIENCE = 10  # Patience for the scheduler
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, dropout=0.2):
         super(LSTMModel, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+        self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
@@ -47,7 +49,8 @@ class LSTMModel(nn.Module):
         out, _ = self.lstm(x, (h0, c0))
         # out shape: (batch_size, window_size, hidden_size)
         # We take the output of the last time step
-        out = self.fc(out[:, -1, :])
+        out = self.dropout(out[:, -1, :]) # Dropout applied to the last time step's output
+        out = self.fc(out)
         return out
 
 def build_parser():
@@ -60,6 +63,8 @@ def build_parser():
                         help="Hidden size of the LSTM")
     parser.add_argument("--num-layers", type=int, default=NUM_LAYERS,
                         help="Number of stacked LSTM layers")
+    parser.add_argument("--dropout", type=float, default=DROPOUT,
+                        help="Dropout rate")
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE,
                         help="Batch size for training")
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE,
@@ -112,6 +117,7 @@ def main():
     SCHEDULER_FACTOR = args.scheduler_factor
     SCHEDULER_MIN_LR = args.scheduler_min_lr
     SCHEDULER_PATIENCE = args.scheduler_patience
+    DROPOUT = args.dropout
 
     # Set random seeds for reproducibility
     if SEED is not None:
@@ -139,19 +145,19 @@ def main():
     op_cond_cols = [col for col in df.columns if col.startswith('op_cond_')]
  
     # Preprocess data
-    df, feature_cols_with_baseline = create_baseline_features(df, feature_cols)    
+    df, feature_cols_with_baseline = create_baseline_features(df, feature_cols, baseline_window=50)    
     df = calculate_train_rul(train_df=df, cap=CAP)  # Cap RUL at specified value to avoid extreme values affecting the model
     train_df, val_df = split_train_val(df)
     # Process test data: create deltas and align RULs
-    test_df, _ = create_baseline_features(test_df, feature_cols)    
+    test_df, _ = create_baseline_features(test_df, feature_cols, baseline_window=50)    
     test_df = calculate_rul(test_df, label_df=label_df, cap=CAP)
     # Normalize all datasets (train, validation, test) using the training set statistics
-    train_df, test_df, val_df = normalize_data(train_df, test_df, val_df, sensor_cols=feature_cols_with_baseline) # We only want to normalize the sensor columns
+    train_df, test_df, val_df = normalize_data(train_df, test_df, val_df, sensor_cols=feature_cols_with_baseline+op_cond_cols) # We only want to normalize the sensor columns
     
     print(f"Creating sliding windows...")
-    train_windows, train_targets = create_sliding_windows(train_df, feature_cols_with_baseline, WINDOW_SIZE)
-    val_windows, val_targets = create_sliding_windows(val_df, feature_cols_with_baseline, WINDOW_SIZE)
-    test_windows, test_targets, _ = create_test_windows(test_df, feature_cols_with_baseline, WINDOW_SIZE)
+    train_windows, train_targets = create_sliding_windows(train_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE, 5)  # Use a step size of 5 to reduce the number of highly correlated samples
+    val_windows, val_targets = create_sliding_windows(val_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE, 5)
+    test_windows, test_targets, _ = create_test_windows(test_df, feature_cols_with_baseline+op_cond_cols, WINDOW_SIZE)
     
     # Convert to tensors
     X_train = torch.FloatTensor(train_windows)
@@ -165,7 +171,7 @@ def main():
     val_loader = DataLoader(TensorDataset(X_val, y_val), batch_size=BATCH_SIZE, shuffle=False)
     
     print(f"Training LSTM model on {DEVICE}...")
-    model = LSTMModel(NUM_FEATURES, HIDDEN_SIZE, NUM_LAYERS, 1).to(DEVICE)
+    model = LSTMModel(NUM_FEATURES, HIDDEN_SIZE, NUM_LAYERS, 1, dropout=DROPOUT).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=SCHEDULER_FACTOR, min_lr=SCHEDULER_MIN_LR, patience=SCHEDULER_PATIENCE)
@@ -179,6 +185,7 @@ def main():
         mlflow.log_param("batch_size", BATCH_SIZE)
         mlflow.log_param("learning_rate", LEARNING_RATE)
         mlflow.log_param("weight_decay", WEIGHT_DECAY)
+        mlflow.log_param("dropout", DROPOUT)
         mlflow.log_param("early_stopping_patience", EARLY_STOPPING_PATIENCE)
         mlflow.log_param("early_stopping_delta", EARLY_STOPPING_DELTA)
         mlflow.log_param("cap", CAP)
@@ -189,7 +196,6 @@ def main():
         mlflow.log_param("device", DEVICE)
         mlflow.log_metric("train_samples", len(train_windows))
         mlflow.log_metric("test_samples", len(test_windows))
-        
         start_time = time.time()
         best_val_loss = float("inf")
         epochs_without_improvement = 0
